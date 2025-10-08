@@ -1,0 +1,192 @@
+% Prepare InSAR experimental noise covariance matrix
+clc;clear;close all;
+% ── A.  Full-resolution scene for semi-variogram fitting ───────────────────
+load desc_cov_data.mat        % gives cum_disp, longitudes, latitudes, X, Y …
+
+% 1. Displacement image expected later as “unw”
+lambda = 5.56e-2;
+unw = cum_disp_rad/(4*pi)*lambda; % In meters
+
+% 2. Pixel size in kilometres
+%    Grid is regular:  Δlon = longitudes(2)-longitudes(1),  Δlat = latitudes(2)-latitudes(1)
+deg2km = 111.319;            % km per degree of latitude
+dlat   = abs(latitudes(2) - latitudes(1));                    % degrees
+dlon   = abs(longitudes(2) - longitudes(1));                  % degrees
+lat_mid = mean(latitudes);                                    % mid-scene latitude
+pix_ns = dlat * deg2km * 1e3;                                       % N-S pixel height
+pix_ew = dlon * deg2km * 1e3 * cosd(lat_mid);                       % E-W pixel width
+pixsiz = 30; % pixel size m
+
+% 3. Optional flip so that row 1 = north (depends on how Y was generated)
+%    If you plot and the image appears upside-down, uncomment the next line.
+% unw = flipud(unw);
+
+% 4. Save in the exact struct the downstream code expects
+SNdif.pixsiz = pixsiz;         % scalar (m)
+SNdif.unw    = unw;            % 2-D displacement array
+save('SNdif.mat','SNdif');     % the original script will “load SNdif.mat”
+% ── B.  Quadtree-leaf centres from the already down-sampled file ───────────
+% File format:  lon   lat   LOS_disp   block_size
+quad = readmatrix('descending.txt');
+lon_q  = quad(:,1);          % 1×N column
+lat_q  = quad(:,2);
+disp_q = quad(:,3);          % not needed by covariance loop, but keep anyway
+
+% 1. Convert lon/lat directly to pixel indices:
+%    Because longitudes and latitudes are evenly spaced vectors, we use
+%      idx = round( (value - first) / spacing ) + 1
+dlon = longitudes(2) - longitudes(1);
+dlat = latitudes (2) - latitudes (1);
+
+ix_q = round( (lon_q - longitudes(1)) / dlon ) + 1;   %  col numbers (x)
+iy_q = round( (lat_q - latitudes (1)) / dlat ) + 1;   %  row numbers (y)
+
+% 2. Provide the minimal variables the Step 3 loop expects
+numleaves = numel(ix_q);
+sqval = disp_q.';                  % 1 × N (transpose!)
+cx    = repmat(ix_q.', 4, 1);      % 4×N dummy x-corners
+cy    = repmat(iy_q.', 4, 1);      % 4×N dummy y-corners
+
+% From here your original Step 3 block begins unchanged:
+%    → it consumes cx, cy, sqval, and SNdif.pixsiz and produces insarcov_quad
+% --------------------------------------------------------------------------
+%% High pass filter unw
+% 1. High-pass filter to remove long-wavelength deformation
+lowPass    = imgaussfilt(unw,50,'FilterSize',[311 311]);
+unw = unw - lowPass;
+
+
+%% Step 1, select non-deforming area north of the caldera
+% first remove a linear plane
+% we draw a line y = a + b*x , mask out area below.
+% ── NEW: blank-out a 5-km disc centred on the caldera ──────────────────────
+x_cen = 223;           % <- column index (pixels) of caldera centre
+y_cen = 759;           % <- row    index (pixels) of caldera centre
+                       %   (replace with the values for your scene)
+
+mask = ones(size(unw));
+
+[ysize, xsize] = size(mask);
+[xx,yy] = meshgrid(1:xsize,1:ysize);
+
+radius_km  = 5e3;                    % m
+radius_pix = radius_km / SNdif.pixsiz;   % convert km → pixels
+
+dist2 = (xx - x_cen).^2 + (yy - y_cen).^2;
+mask(dist2 <= radius_pix^2) = NaN;       % anything inside the disc → NaN
+mask(xx > 515) = NaN;
+
+ndfunw =unw.*mask;
+
+xxeff = xx(isfinite(ndfunw)); yyeff = yy(isfinite(ndfunw));ndfunweff = ndfunw(isfinite(ndfunw));
+G = [xxeff(:)';yyeff(:)';ones(size(xxeff(:)'))]';
+d = ndfunweff(:);
+coef= pinv(G)*d;
+
+ndfunw = ndfunw - coef(1)*xx-coef(2)*yy-coef(3);
+
+% effective points 
+numeffpt = sum(isnan(ndfunw(:)) == 0);
+
+figure;
+imagesc(ndfunw);colorbar; 
+
+
+%% Step 2, structure function
+% let's reduce the number of effective points 
+% subsample data to (x,y)
+numpt = 2000;
+gridsize = round(sqrt(numeffpt/numpt));
+xsizenew = length(1:gridsize:xsize);
+ysizenew = length(1:gridsize:ysize);
+numpt = xsizenew*ysizenew;
+indexlist = nan(numpt,2);
+k=1;
+for i = 1: gridsize:xsize
+    for j = 1:gridsize:ysize
+        indexlist (k,1) = i;
+        indexlist (k,2) = j;
+        k=k+1;
+    end
+end
+pixdist = []; % distance, r
+s = []; % structure function, s(r)
+xlist=[];ylist=[];
+% figure;imagesc(ndfunw); colorbar; hold on;
+for i = 1:numpt-1
+    x1_ct = indexlist(i,1);
+    y1_ct = indexlist(i,2);
+    v1 = ndfunw(y1_ct,x1_ct);
+    for j = i+1: numpt
+        x2_ct = indexlist(j,1);
+        y2_ct = indexlist(j,2);
+        v2 = ndfunw(y2_ct,x2_ct);
+        dist = sqrt((x1_ct-x2_ct)^2+(y1_ct-y2_ct)^2).*pixsiz;
+        if ~isnan(v1+v2)  && dist<8e3
+            pixdist(end+1) = dist;
+            s(end+1) = (v1-v2)^2;
+%             xlist(end+1) = x1;
+%             ylist(end+1) = y1;
+        end
+    end
+end
+
+bindist = unique(pixdist);
+for i = 1: length(bindist)
+    index = find(pixdist == bindist(i));
+    v(i) = median(s(index));
+    
+end 
+
+figure; histogram(pixdist); axis square;
+v = medfilt1(v,10);
+figure(5);clf;scatter(bindist,v);hold on;
+% xlim([prctile(pixdist,10),prctile(pixdist,70)])
+f= @(b,x) b(1).*(1-exp(b(2).*x));
+B=fminsearchbnd(@(b) norm(v-f(b,bindist)), [3e-6, -1e-3],[0, -1e-2],[5e-3,-1e-8]);
+plot(bindist,f(B,bindist), 'k','linewidth',3)
+title("Descending Structure Function");
+axis square;
+xlabel("Distance (m)")
+exportgraphics(gca, 'desc_struct_func.png', 'Resolution', 500)
+fprintf("B1 = %.2d, B2 = %.2d \n", B(1), B(2))
+% ylim([0,4]*1e-05)
+% we find s(r) = 1.18e-4*(1-exp(-4.93e-4*r))
+% cov(r) = 6.0132 - s(r)/2
+
+%% Step 3, compute covariance for quadtree leaves 
+% clear;close all; clc
+numleaves = length(sqval); % number of quadtree leaves
+insarcov_quad = zeros(numleaves,numleaves); % initiate covariance matrix
+
+%instead of calculating the mean of all pairs of covariance between two
+%quad leaves, we compute the mean distance of the two quad leaves and use
+%that as an approximate for the sake of efficiency.
+for i = 1:numleaves
+    xsquare = cx(:,i);
+    ysquare = cy(:,i);
+    x1_ct = mean(xsquare);
+    y1_ct = mean(ysquare);
+    
+    for j = i:numleaves
+        xsquare = cx(:,j);
+        ysquare = cy(:,j);
+        x2_ct = mean(xsquare);
+        y2_ct = mean(ysquare);
+ 
+        dist = sqrt((x1_ct-x2_ct)^2 + (y1_ct-y2_ct).^2)*SNdif.pixsiz;
+        
+        s_ij = B(1).*(1-exp(B(2) * dist));
+        c_ij = mean(B(1)-s_ij(:)/2);
+        insarcov_quad(i,j) = c_ij;
+        insarcov_quad(j,i) = c_ij;
+    end
+end
+%%
+figure;imagesc(insarcov_quad);colorbar; 
+title("Descending Covariance Matrix");
+axis square;
+exportgraphics(gca, 'desc_cov_insar.png', 'Resolution', 500)
+
+%%
+save desc_cov.mat insarcov_quad

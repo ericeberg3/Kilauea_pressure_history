@@ -1,0 +1,6 @@
+Data/
+Figures/
+PaperFigs/
+Elizabeth insar scripts/
+*.mat
+.DS_Store
