@@ -160,8 +160,11 @@ invStdPWRL = invStdPWRL(:);
 %% Optimizing geometry
 
 % Setting up parameters from Wang et al. 2021 for reference
-taiyi_parameters = [1600.79, 914.47, 90, 0, 0.46e3 + npitloc(1), 0.35e3 + npitloc(2), -2.18e3, -4e7, ... 
-    277.01, 1621.47, 63, 136, npitloc(1) + 1890, npitloc(2) - 3030, -3630, -10e6];
+% taiyi_parameters = [1600.79, 914.47, 90, 0, 0.46e3 + npitloc(1), 0.35e3 + npitloc(2), -2.18e3, -4e7, ... 
+%     277.01, 1621.47, 63, 136, npitloc(1) + 1890, npitloc(2) - 3030, -3630, -10e6];
+% Use taiyi + kyle for HMM 
+taiyi_parameters = [1600.79, 914.47, 90, 0, 50, 200, -2.18e3, -4e7, ... 
+     277.01, 1621.47, 63, 136, npitloc(1) + 1890, npitloc(2) - 3030, -3630, -10e6];
 
 % Setting up parameters from Roman et al. 2021 for reference
 aspect_ratio_HMM = 1;
@@ -178,17 +181,17 @@ roman_parameters = [vert_sd_HMM, vert_sd_HMM/(aspect_ratio_HMM), 90, 0, 0, 0, -9
 % xSC, ySC, dSC, "SC aspect ratio", "dip", strike, "dpSC_insar", "dpSC_gps", volSC]
 % yHMM lb used to be -0.5e3 + npitloc(2)
 % Old:
-% lb = [-5e7, -5e7, 1e8, -5e2, -2e3 + npitloc(2), -2e3, ...
-%     0.7e3, -2.9e3, -4.6e3, 0.05, 40, 100, -5e7, -5e7, 0.5e9]; 
-% ub = [1e6, 1e6, 3e10, 0.5e3 + npitloc(1), 0.5e3 + npitloc(2), -3e2, ...
-%      1.8e3, -2.0e3, -2.9e3, 1, 90, 180, 1e6, 1e6, 18e9]; 
+lb = [-5e7, -5e7, 1e8, -5e2, -2e3 + npitloc(2), -2e3, 0.8, ...
+    0.7e3, -2.9e3, -4.6e3, 0.05, 40, 100, -5e7, -5e7, 2.4e9]; 
+ub = [1e6, 1e6, 3e10, 0.5e3 + npitloc(1), 0.5e3 + npitloc(2), -3e2, 2.0, ...
+     1.8e3, -2.0e3, -2.9e3, 1, 90, 180, 1e6, 1e6, 20e9]; 
 
 % Inferred from kyle / taiyi:
-lb = [-5e7, -5e7, 1e8, -100, 0, -1.3e3, ...
-    -2.5e3 + npitloc(1), -3.4e3 + npitloc(2), -4.7e3, 0.1, 
-
-ub = [1e6, 1e6, 1e10, 200, 400, -200, ...
-    2.5e3 + npitloc(2), -1e3 + npitloc(2), -2.7e3, 1, 
+% lb = [-5e7, -5e7, 1e8, -100, 0, -1.3e3, ...
+%     -2.5e3 + npitloc(1), -3.4e3 + npitloc(2), -4.7e3, 0.05, 40, 100, -5e7, -5e7, 3e9];
+% 
+% ub = [1e6, 1e6, 1e10, 200, 400, -200, ...
+%     2.5e3 + npitloc(2), -1e3 + npitloc(2), -2.7e3, 0.3, 90, 180, 1e6, 1e6, 20e9];
 
 % Save figures for export
 saveFigs = false;
@@ -254,9 +257,9 @@ insary = [insary_asc, insary_desc];
 block_size = [blocks_asc, blocks_desc];
 
 %% MCMC Static inversion
-paramNames = {'dpHMM_insar', 'dpHMM_gps', 'volHMM', 'xHMM', 'yHMM', 'dHMM', ...
+paramNames = {'dpHMM_insar', 'dpHMM_gps', 'volHMM', 'xHMM', 'yHMM', 'dHMM', 'alphaHMM' ...
     'xSC', 'ySC', 'dSC', 'alphaSC', 'dipSC', 'strikeSC', 'dpSC_insar', 'dpSC_gps', 'volSC'};
-ntrials = 1e5; % Customize to get convergence
+ntrials = 1e4; % Customize to get convergence
 
 % Testing GPS and prior weights.
 gps_weights = linspace(4e1, 8e1, 10);
@@ -308,7 +311,7 @@ end
 % disp(gps_weights(end));
 
 
-% Get the full geometry parameters based on the optimization results:
+%% Get the full geometry parameters based on the optimization results:
 disp("GPS L2: " + gps_l2 + " InSAR L2: " + insar_l2);
 optimizedM = get_full_m(taiyi_parameters, optParams, true, "insar");
 
@@ -373,6 +376,7 @@ plotParamNames = {
   '$x_{\mathrm{HMM}}\ (\mathrm{km})$', ...
   '$y_{\mathrm{HMM}}\ (\mathrm{km})$', ...
   '$d_{\mathrm{HMM}}\ (\mathrm{km})$', ...
+  '$\alpha_{\mathrm{HMM}}$', ...
   '$x_{\mathrm{SC}}\ (\mathrm{km})$', ...
   '$y_{\mathrm{SC}}\ (\mathrm{km})$', ...
   '$d_{\mathrm{SC}}\ (\mathrm{km})$', ...
@@ -385,12 +389,12 @@ plotParamNames = {
 };
 
 % Scale units to appropriate factor
-unitScaling = [1e-6, 1e-6, 1e-9, 1e-3, 1e-3, 1e-3, ...
+unitScaling = [1e-6, 1e-6, 1e-9, 1e-3, 1e-3, 1e-3, 1, ...
     1e-3, 1e-3, 1e-3, 1, 1, 1, 1e-6, 1e-6, 1e-9];
 
 figure(5);
 clf;
-tl = tiledlayout(3,5,'Padding','compact', 'TileSpacing','compact');
+tl = tiledlayout(4,4,'Padding','compact', 'TileSpacing','compact');
 priormeans = get_full_m(taiyi_parameters, [], false, "insar");
 load Data/paramDists.mat;
 
@@ -477,7 +481,7 @@ set(gcf,'Color','w');  % white background
 
 numBins = 30;
 
-for i = 1:nparamss
+for i = 1:nparams
     for j = 1:nparams
         ax = nexttile(tl);
         hold(ax,'on');
@@ -590,7 +594,7 @@ dp(:, 1) = fillmissing(dp(:, 1), "makima", 1);
 
 %% Error analysis
 
-N_draws = 50;
+N_draws = 20;
 N_noise = 5;
 
 disp("Getting errors...")

@@ -181,10 +181,10 @@ roman_parameters = [vert_sd_HMM, vert_sd_HMM/(aspect_ratio_HMM), 90, 0, 0, 0, -9
 % xSC, ySC, dSC, "SC aspect ratio", "dip", strike, "dpSC_insar", "dpSC_gps", volSC]
 % yHMM lb used to be -0.5e3 + npitloc(2)
 % Old:
-lb = [-5e7, -5e7, 1e8, -5e2, -2e3 + npitloc(2), -2e3, ...
-    0.7e3, -2.9e3, -4.6e3, 0.05, 40, 100, -5e7, -5e7]; 
-ub = [1e6, 1e6, 3e10, 0.5e3 + npitloc(1), 0.5e3 + npitloc(2), -3e2, ...
-     1.8e3, -2.0e3, -2.9e3, 1, 90, 180, 1e6, 1e6]; 
+lb = [-5e7, -5e7, 1e8, -5e2, -2e3 + npitloc(2), -2e3, 0.8, ...
+    0.7e3, -2.9e3, -4.6e3, 0.05, 40, 100, -5e7, -5e7, 2.4e9]; 
+ub = [1e6, 1e6, 3e10, 0.5e3 + npitloc(1), 0.5e3 + npitloc(2), -3e2, 2.0, ...
+     1.8e3, -2.0e3, -2.9e3, 1, 90, 180, 1e6, 1e6, 20e9]; 
 
 % Inferred from kyle / taiyi:
 % lb = [-5e7, -5e7, 1e8, -100, 0, -1.3e3, ...
@@ -257,9 +257,9 @@ insary = [insary_asc, insary_desc];
 block_size = [blocks_asc, blocks_desc];
 
 %% MCMC Static inversion
-paramNames = {'dpHMM_insar', 'dpHMM_gps', 'volHMM', 'xHMM', 'yHMM', 'dHMM', ...
-    'xSC', 'ySC', 'dSC', 'alphaSC', 'dipSC', 'strikeSC', 'dpSC_insar', 'dpSC_gps'};
-ntrials = 1e4; % Customize to get convergence
+paramNames = {'dpHMM_insar', 'dpHMM_gps', 'volHMM', 'xHMM', 'yHMM', 'dHMM', 'alphaHMM' ...
+    'xSC', 'ySC', 'dSC', 'alphaSC', 'dipSC', 'strikeSC', 'dpSC_insar', 'dpSC_gps', 'volSC'};
+ntrials = 1e5; % Customize to get convergence
 
 % Testing GPS and prior weights.
 gps_weights = linspace(4e1, 8e1, 10);
@@ -311,7 +311,7 @@ end
 % disp(gps_weights(end));
 
 
-%% Get the full geometry parameters based on the optimization results:
+% Get the full geometry parameters based on the optimization results:
 disp("GPS L2: " + gps_l2 + " InSAR L2: " + insar_l2);
 optimizedM = get_full_m(taiyi_parameters, optParams, true, "insar");
 
@@ -376,6 +376,7 @@ plotParamNames = {
   '$x_{\mathrm{HMM}}\ (\mathrm{km})$', ...
   '$y_{\mathrm{HMM}}\ (\mathrm{km})$', ...
   '$d_{\mathrm{HMM}}\ (\mathrm{km})$', ...
+  '$\alpha_{\mathrm{HMM}}$', ...
   '$x_{\mathrm{SC}}\ (\mathrm{km})$', ...
   '$y_{\mathrm{SC}}\ (\mathrm{km})$', ...
   '$d_{\mathrm{SC}}\ (\mathrm{km})$', ...
@@ -383,17 +384,17 @@ plotParamNames = {
   '$\phi_{\mathrm{SC}}\ (^\circ)$', ...
   '$\psi_{\mathrm{SC}}\ (^\circ)$', ...
   '$\Delta p_{\mathrm{SC}}^{\mathrm{InSAR}}\ (\mathrm{MPa})$', ...
-  '$\Delta p_{\mathrm{SC}}^{\mathrm{GPS}}\ (\mathrm{MPa})$',
-  %'$V_{\mathrm{SC}}\ (\mathrm{km}^3)$',
+  '$\Delta p_{\mathrm{SC}}^{\mathrm{GPS}}\ (\mathrm{MPa})$', ...
+  '$V_{\mathrm{SC}}\ (\mathrm{km}^3)$',
 };
 
 % Scale units to appropriate factor
-unitScaling = [1e-6, 1e-6, 1e-9, 1e-3, 1e-3, 1e-3, ...
+unitScaling = [1e-6, 1e-6, 1e-9, 1e-3, 1e-3, 1e-3, 1, ...
     1e-3, 1e-3, 1e-3, 1, 1, 1, 1e-6, 1e-6, 1e-9];
 
 figure(5);
 clf;
-tl = tiledlayout(3,5,'Padding','compact', 'TileSpacing','compact');
+tl = tiledlayout(4,4,'Padding','compact', 'TileSpacing','compact');
 priormeans = get_full_m(taiyi_parameters, [], false, "insar");
 load Data/paramDists.mat;
 

@@ -20,7 +20,7 @@ params = [ ...
     struct('file','Data/post_im/alpha_sc.png', 'name','dpHMM_gps',  'xlim',[-1e8 1e8]); ...
     struct('file','Data/post_im/alpha_sc.png', 'name','dpSC_insar',  'xlim',[-1e8 1e8]); ...
     struct('file','Data/post_im/alpha_sc.png', 'name','dpSC_gps',  'xlim',[-1e8 1e8]); ...
-    struct('file','Data/post_im/alpha_sc.png', 'name','volSC',  'xlim',[2e9 20e9]); ...
+    struct('file','Data/post_im/alpha_sc.png', 'name','volSC',  'xlim',[0.5e9 5.5e9]); ...
     struct('file','Data/post_im/mu.png', 'name','mu', 'xlim',[8.5, 11]) % note units of log10(Pa)
 ];
 
@@ -131,7 +131,7 @@ for p=1:nP
 
     % Estimate the SC volume prior as a gaussian around 2.5 km^3
     if strcmp(params(p).name,'volSC')
-        dist = makedist('Uniform','lower',2.0e9, 'upper', 20e9);
+        dist = makedist('Uniform','lower',3.0e9, 'upper', 20e9);
     end
     
     % alphaHMM harder to fit bc of truncation, so manually set mu
@@ -217,7 +217,7 @@ end
 load Data/paramDists.mat
 figure(12);
 subplot(1,3,1)
-x = linspace(1.0, 2.0,600);
+x = linspace(1.0, ,600);
 plot(x, pdf(paramDists.alphaHMM.dist,x)), title alphaHMM
 
 subplot(1,3,2)
