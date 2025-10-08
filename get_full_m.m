@@ -11,17 +11,19 @@ function m = get_full_m(prior, opt_params, forward, pressure_type)
 % pressure_type - "insar" or "gps". Tells which pressure change to use for
 % the output m vector.
 %
-% Variable names: ["dpHMM_insar", "dpHMM_gps", "volHMM", 'xHMM', 'yHMM', "zHMM",
+% Variable names: ["dpHMM_insar", "dpHMM_gps", "volHMM", 'xHMM', 'yHMM', "zHMM", 
 % "xSC', ySC, dSC, "SC aspect ratio", "dip", strike, "dpSC_insar", "dpSC_gps", "volSC"];
 
     % Get full m array based on optimized params
     if(forward)
         % Get geometry based on insar pressure change
         if(pressure_type == "insar")
-            opt_params = [opt_params(1), opt_params(3:end-2), opt_params(end)];
+            opt_params = [opt_params(1), opt_params(3:13)];%, opt_params(15)];
+            % opt_params = [opt_params(1), opt_params(3:end-2), opt_params(end)];
         % Otherwise we want the GPS pressure change
         else
-            opt_params = [opt_params(2:end-3), opt_params(end-1:end)];
+            % opt_params = [opt_params(2:end-3), opt_params(end-1:end)];
+            opt_params = [opt_params(2), opt_params(3:12), opt_params(14)];%, opt_params(15)];
         end
         
         % Fixed aspect ratio for HMM
@@ -36,7 +38,7 @@ function m = get_full_m(prior, opt_params, forward, pressure_type)
         
         % Same process for SC but fewer parameters are retrieved from the prior
         aspect_ratio_SC = opt_params(9);
-        SC_volume = opt_params(end);
+        SC_volume = 2.5e9; % opt_params(end);
         opt_vert_sd = (3/(4*pi) * SC_volume * (aspect_ratio_SC^2))^(1/3);
         opt_horiz_sd = opt_vert_sd/(aspect_ratio_SC);
         prior_SC = prior(9:end);
@@ -48,7 +50,7 @@ function m = get_full_m(prior, opt_params, forward, pressure_type)
     % Get optimization result vector from an inputted m vector
     else
         m = real([prior(8), prior(8), (4/3) * pi * prior(1) * prior(2)^2, prior(5), prior(6), prior(7), ...
-            prior(13:15), prior(9)/prior(10), prior(11:12), prior(end), prior(end), (4/3) * pi * prior(9) * prior(10)^2]);
+            prior(13:15), prior(9)/prior(10), prior(11:12), prior(end), prior(end)]);%, (4/3) * pi * prior(9) * prior(10)^2]);
     end
 
 end

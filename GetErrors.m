@@ -186,7 +186,7 @@ parfor i = 1:N_draws
     
         %% Re-invert for pressure of now re-noised synthetic data
         temp = TimeDependentLSQtilt(gHMMflat_samp, gSCflat_samp, gTiltHMM_samp, gTiltSC_samp, ux_noised, uy_noised, uz_noised, ...
-             tilte_pred, tiltn_pred, dispstd, GPSNameList, rw_stddev, dp_weight, true);
+             tilte_noised, tiltn_noised, dispstd, GPSNameList, rw_stddev, dp_weight, true);
         
         % Fill outliers
         [temp(idx_SC), TF] = filloutliers(temp(idx_SC), "makima", "movmedian", 100, 1);
