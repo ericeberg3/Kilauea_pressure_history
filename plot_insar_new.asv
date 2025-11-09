@@ -1,5 +1,5 @@
 function plot_insar_new(insarx, insary, insaru, block_size, look, ...
-        x, y, u1d, u1d_LSQ, xon, yon, con, grid_res, ...
+        x, y, u1d, u1d_LSQ, xon, yon, grid_res, ...
         GPSNameList, optimizedM, coast_new, cLimits, opacity, saveFigs, dir)
 % PLOT_INSAR_NEW — Draw InSAR quadtree on a hill-shaded grey DEM backdrop.
 %
@@ -250,22 +250,21 @@ ylim(inax, ylims);
 % Link axes and lock them 
 linkaxes([background_ax, inax],'xy');
 if(con)
-    % regenerate / update the color-bar
-    cb = colorbar(inax);
-    % cb.Label.String = 'LOS displacement (m)';
-    % cb.Location = 'manual';
-    % cb.Position = [0.773 0.665 0.04 0.25];
-    % cb.TickDirection = 'in';
-    % cb.AxisLocation = 'in';
-    % cb.Color = 'k';
-    cb.FontSize = 42;
-end
+% regenerate / update the color-bar
+cb = colorbar(inax);
+% cb.Label.String = 'LOS displacement (m)';
+% cb.Location = 'manual';
+% cb.Position = [0.773 0.665 0.04 0.25];
+% cb.TickDirection = 'in';
+% cb.AxisLocation = 'in';
+% cb.Color = 'k';
+% cb.FontSize = 42;
 
 
 pos = background_ax.Position;
 inax.Position = pos;
 set(inax, 'Layer', 'top')
-set(gca, 'FontSize', 42, "LineWidth", 3); % 'YTickLabel', []
+set(gca, 'FontSize', 56, "LineWidth", 5); % 'YTickLabel', []
 if(~xon) set(gca,'XTickLabel', []); end
 if(~yon) set(gca,'YTickLabel', []); end
 

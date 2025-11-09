@@ -15,7 +15,7 @@ gps_sigma = 1./gps_sigma;
 %% Use posterior distribution to generate a list of many candidate geometries
 dtheta = 0;
 full_param_names = {'dpHMM_insar', 'dpHMM_gps','volHMM', 'alphaHMM', 'xHMM', 'yHMM', 'dHMM', ...
-    'alphaSC', 'dipSC', 'strikeSC', 'xSC', 'ySC', 'dSC', 'dpSC_insar', 'dpSC_gps', 'mu'}; 
+    'alphaSC', 'dipSC', 'strikeSC', 'xSC', 'ySC', 'dSC', 'dpSC_insar', 'dpSC_gps', 'volSC', 'mu'}; 
 full_posterior = zeros(length(full_param_names), size(posterior,2));
 
 % Excluding dip HMM, strike HMM, SC volume % ADD MU
@@ -45,7 +45,7 @@ opt_horiz_sd = opt_vert_sd./(alpha_HMM);
 optimizedM = get_full_m(taiyi_parameters, optParams, true, "insar");
 
 % Check one parameterameter sampling correctly
-complete_posterior(1:8,:) = optimizedM(1:8)' * ones(1, length(posterior));
+% complete_posterior(1:8,:) = optimizedM(1:8)' * ones(1, length(posterior));
 
 complete_posterior(1,:) = opt_vert_sd;
 complete_posterior(2,:) = opt_horiz_sd;
@@ -57,10 +57,9 @@ complete_posterior(6,:) = full_posterior(6,:);
 % Must make the z coordinate relative to the top of the sphere - surface
 complete_posterior(7,:) = full_posterior(7,:); % -full_posterior(5,:) + taiyi_parameters(1); now this is already relative to top of sphere
 complete_posterior(8,:) = full_posterior(1, :); % dpHMM take insar
-mu_dist = full_posterior(end,:); % NOTE: mu is in units log10(Pa)
+mu_dist = full_posterior(end,:); % mu is in units log10(Pa)
 
-SC_vol = 2.5e9;
-% REVERT THIS BACK
+SC_vol = full_posterior(end-1);
 alpha_SC = full_posterior(8,:); 
 % optParams(3) * ones(1, length(full_posterior(7,:))); 
 opt_vert_sd = (3/(4*pi) .* SC_vol .* (alpha_SC.^2)).^(1/3);
@@ -78,13 +77,13 @@ complete_posterior(15,:) = full_posterior(13,:);
 complete_posterior(16,:) = full_posterior(14, :);
 
 
-figure(14);
-for p = 1:length(full_param_names)
-    subplot(4, 4, p);
-    histogram(complete_posterior(p, :));
-    xline(optimizedM(p), 'color', 'red');
-    title("Param number = " + p);
-end
+% figure(14); clf;
+% for p = 1:length(full_param_names)
+%     subplot(4, 5, p);
+%     histogram(full_posterior(p, :));
+%     % xline(optimizedM(p), 'color', 'red');
+%     title("Param = " + full_param_names(p));
+% end
 
 % randIdx = randi(size(complete_posterior, 2), [1, N_draws]);
 
@@ -97,7 +96,7 @@ while i < N_draws + 1
     % if(complete_posterior(7, randIdx) + abs(complete_posterior(1, randIdx)) < taiyi_parameters(7) + abs(taiyi_parameters(1)))
     geo_samples(:,i) = complete_posterior(:, randIdx);
     % Add offset to top of HMM to bring center back to center of volume
-    geo_samples(7,i) = geo_samples(7,i) - geo_samples(1);
+    geo_samples(7,i) = geo_samples(7,i) - geo_samples(1,i);
     mu_samples(i) = mu_dist(randIdx);
     i = i + 1;
     % end
@@ -120,7 +119,7 @@ end
 parfor i = 1:N_draws
     % Format new geometry into optimizedM array
     m_samp = geo_samples(:,i); % get_full_m(taiyi_parameters, geo_samples(:,i), true);
-    mu_samp = 10^mu_samples(i);
+    mu_samp = 3.08e9; %10^mu_samples(i);
     % Create new green's functions
     [gHMM_samp, gSC_samp] = creategreens(m_samp(1:8), m_samp(9:end), mu_samp);
     [gTiltHMM_samp, gTiltSC_samp] = createtiltgreens(m_samp(1:8), m_samp(9:end), dtheta, false, mu_samp);
@@ -162,11 +161,11 @@ parfor i = 1:N_draws
         gps_u_noise = normrnd(0,gps_sigma(3),[1,length(ux)]);
     
         % Add generated noise to each data
-        tilte_noised = tilte_pred + rw_east_noise;
-        tiltn_noised = tiltn_pred + rw_north_noise;
-        ux_noised = ux_pred + gps_e_noise;
-        uy_noised = uy_pred + gps_n_noise;
-        uz_noised = uz_pred + gps_u_noise;
+        tilte_noised = tilte_pred;% + rw_east_noise;
+        tiltn_noised = tiltn_pred;% + rw_north_noise;
+        ux_noised = ux_pred;% + gps_e_noise;
+        uy_noised = uy_pred;% + gps_n_noise;
+        uz_noised = uz_pred;% + gps_u_noise;
         
         ux_dist(i, j, :, :) = ux_noised;
         uy_dist(i, j, :, :) = uy_noised;
@@ -188,10 +187,11 @@ parfor i = 1:N_draws
         temp = TimeDependentLSQtilt(gHMMflat_samp, gSCflat_samp, gTiltHMM_samp, gTiltSC_samp, ux_noised, uy_noised, uz_noised, ...
              tilte_noised, tiltn_noised, dispstd, GPSNameList, rw_stddev, dp_weight, true);
         
-        % Fill outliers
+        % % Fill outliers
         [temp(idx_SC), TF] = filloutliers(temp(idx_SC), "makima", "movmedian", 100, 1);
         temp(TF) = nan; % Now fill in HMM outliers
         temp(idx_HMM) = fillmissing(temp(idx_HMM), "makima", 1);
+        temp(idx_SC) = fillmissing(temp(idx_SC), "makima", 1);
 
         dp_dist(i, j, :) = [temp(idx_HMM) .* m_samp(8)/(1e6), temp(idx_SC) .* m_samp(16)/(1e6)];
     end
@@ -202,8 +202,8 @@ clear gHMM_samp gSC_samp gTiltHMM_samp gTiltSC_samp temp
 
 %% Now pick the 10th and 90th percentile points for each sample
 % Get conf. interval for pressure
-pLow  = prctile(dp_dist, 10, 1)';  % 10th percentile across columns
-pHigh = prctile(dp_dist, 90, 1)';  % 90th percentile
+pLow  = prctile(dp_dist, 5, 1)';  % 10th percentile across columns
+pHigh = prctile(dp_dist, 95, 1)';  % 90th percentile
 
 dp_low = real([pLow(1:length(tiltx)), pLow((length(tiltx) + 1):(2*length(tiltx)))]);
 dp_high = real([pHigh(1:length(tiltx)), pHigh((length(tiltx) + 1):(2*length(tiltx)))]);
@@ -226,19 +226,19 @@ tilty_flat = reshape(tilty_dist, H*G, St);
 
 % 2) Compute percentiles along the first dimension of each flat array
 %    prctile(...,p,1) returns [1 × S × T], so squeeze to [S × T]
-ux_p10 = squeeze( prctile(ux_flat, 10, 1) );  % [S × T]
-ux_p90 = squeeze( prctile(ux_flat, 90, 1) );
+ux_p10 = squeeze( prctile(ux_flat, 5, 1) );  % [S × T]
+ux_p90 = squeeze( prctile(ux_flat, 95, 1) );
 
-uy_p10 = squeeze( prctile(uy_flat, 10, 1) );
-uy_p90 = squeeze( prctile(uy_flat, 90, 1) );
+uy_p10 = squeeze( prctile(uy_flat, 5, 1) );
+uy_p90 = squeeze( prctile(uy_flat, 95, 1) );
 
-uz_p10 = squeeze( prctile(uz_flat, 10, 1) );
-uz_p90 = squeeze( prctile(uz_flat, 90, 1) );
+uz_p10 = squeeze( prctile(uz_flat, 5, 1) );
+uz_p90 = squeeze( prctile(uz_flat, 95, 1) );
 
-tiltx_p10 = squeeze( prctile(tiltx_flat, 10, 1) );
-tiltx_p90 = squeeze( prctile(tiltx_flat, 90, 1) );
-tilty_p10 = squeeze( prctile(tilty_flat, 10, 1) );
-tilty_p90 = squeeze( prctile(tilty_flat, 90, 1) );
+tiltx_p10 = squeeze( prctile(tiltx_flat, 5, 1) );
+tiltx_p90 = squeeze( prctile(tiltx_flat, 95, 1) );
+tilty_p10 = squeeze( prctile(tilty_flat, 5, 1) );
+tilty_p90 = squeeze( prctile(tilty_flat, 95, 1) );
 
 % 3) Pack into [Stations × Components × Time] form
 %    component‐order: 1=East, 2=North, 3=Up

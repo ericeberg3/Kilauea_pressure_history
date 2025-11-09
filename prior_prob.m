@@ -141,7 +141,7 @@ for p=1:nP
         sigmaHat = fminbnd(logL, 1e-4, 0.25);
         % base = makedist('Normal','mu',muHat,'sigma',sigmaHat);
         % dist = truncate(base, params(p).xlim(1), params(p).xlim(2));
-        dist = makedist('Normal','mu',muHat,'sigma',sigmaHat);
+        dist = makedist('Normal','mu',muHat,'sigma',0.05);
     end
     
     xs = linspace(params(p).xlim(1), params(p).xlim(2), 400);

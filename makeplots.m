@@ -1,4 +1,4 @@
-function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, insarx, insary, insaru, insaru_pred, block_size, look, tiltx, tilty, ...
+function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilty, ...
     usim, t, nanstat, nanstatbeginning, finalindex, collapset, ...
     dp, dp_low, dp_high, tau, optParams, optimizedM, GPSNameList, gTiltHMM, gTiltSC, xtilt, ytilt, tiltreduced, radscale, ...
     coast_new, taiyi_parameters, disptype, ntrials, offsets, saveFigs)
@@ -29,81 +29,6 @@ function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, insarx, ins
     collapset = date0 + partialYear .* daysInYear;
     collapset = datetime(collapset, 'ConvertFrom', 'datenum', 'Format', 'dd-MM-yy');
     
-    % %% Pressure vs. time figure with dual y-axes
-    % fig = figure(10); clf; 
-    % 
-    % % Define scale factor and offset for SC pressure (adjust these as needed)
-    % sc_scale = 0.5;   % Scaling factor for SC data
-    % sc_offset = 5;  % Downward offset for SC data
-    % 
-    % hmm_scale = 0.5;
-    % 
-    % % Plot HMM pressure on the right y-axis
-    % ax1 = axes;  % This axis will host the HMM data and the transformed SC data
-    % hold(ax1, 'on');
-    % set(ax1, 'YColor', '#0072BD')
-    % 
-    % hmm_pressure = dp(1:end-finalindex,1) * optimizedM(8)/1e6;
-    % hmm_pressure_adj = hmm_scale * hmm_pressure;
-    % h1 = plot(ax1, t(1:end-finalindex), hmm_pressure_adj, ...
-    %     'Color', '#0072BD', 'DisplayName', 'HMM Pressure', 'LineWidth', 4);
-    % ylabel('HMM Pressure (MPa)');
-    % hold on;
-    % 
-    % % Plot HMM confidence intervals on the right axis
-    % xPatch = [t(1:end-finalindex); flipud(t(1:end-finalindex))];
-    % yPatch_HMM = [hmm_scale * dp_low(1:end-finalindex, 1); flipud(hmm_scale * dp_high(1:end-finalindex, 1))];
-    % 
-    % patch(ax1, xPatch, yPatch_HMM, 'blue', 'FaceAlpha', 0.15, 'EdgeColor', 'none'); % HMM conf interval
-    % 
-    % % Adjust the SC pressure data with scaling and offset
-    % sc_pressure = dp(1:end-finalindex, 2)*optimizedM(16)/(1e6);
-    % sc_pressure_adj = sc_scale * sc_pressure - sc_offset;
-    % h2 = plot(ax1, t(1:end-finalindex), sc_pressure_adj, 'DisplayName', 'SC Pressure', 'LineWidth', 4);
-    % 
-    % % Plot SC confidence intervals on the left axis
-    % yPatch_SC = [sc_scale*(dp_low(1:end-finalindex, 2)) - sc_offset; ...
-    %              flipud(sc_scale*(dp_high(1:end-finalindex, 2)) - sc_offset)];
-    % patch(ax1, xPatch, yPatch_SC, 'red', 'FaceAlpha', 0.15, 'EdgeColor', 'none');
-    % ylim([-20, 5]);
-    % 
-    % % Create axes label for SC
-    % ax1_pos = get(ax1, 'Position');
-    % ax1_pos(1) = ax1_pos(1) - 0.05;
-    % ax2 = axes('Position', ax1_pos, ...
-    %        'Color', 'none', ...
-    %        'YAxisLocation', 'left', ...
-    %        'XAxisLocation', 'top', ... 
-    %        'XTick', [], ...       
-    %        'Box', 'off');
-    % 
-    % set(ax2, 'YLim', [-20, 5], 'YColor','#D95319');
-    % ax2.XAxis.Visible = 'off';
-    % 
-    % ticks = get(ax2, 'YTick');
-    % tickLabels = (ticks + sc_offset) / sc_scale;
-    % set(ax2, 'YTickLabel', tickLabels);
-    % ylabel(ax2, 'SC Pressure (MPa)');
-    % 
-    % ticks = get(ax1, 'YTick');
-    % tickLabels = ticks/hmm_scale;
-    % set(ax1, 'YTickLabel', tickLabels);
-    % 
-    % % Set common figure properties
-    % set(ax2, 'FontSize', 20);
-    % set(ax1, 'FontSize', 20);
-    % % title("Pressure vs. Time");
-    % xlabel('Time');
-    % legend([h1, h2], 'Location', 'northeast', "FontSize", 24);
-    % hold off
-    % 
-    % 
-    % disp("HMM Total Pressure Drop: " + dp(end-finalindex, 1)*optimizedM(8)/(1e6) + " ub: " + dp_high(end-finalindex, 1) + " lb: " + dp_low(end-finalindex,1));
-    % disp("SC Total Pressure Drop: " + dp(end-finalindex, 2)*optimizedM(16)/(1e6) + " ub: " + dp_high(end-finalindex, 2) + " lb: " + dp_low(end-finalindex,2));
-    % if(saveFigs)
-    %     % saveas(10, "./Figures/pvt_" + num2str(ntrials, "%.1e") + "trials.fig");
-    %     exportgraphics(fig, './PaperFigs/pvt.png', 'Resolution', 500);
-    % end
     %% Subplot pvt version
     
     fig = figure(11);
@@ -762,7 +687,13 @@ print(gcf,'-dpng','-r200','./PaperFigs/disp_grid.png')
     ylim([-7.1e3, 7.1e3]);
     zlim([-7.1e3, 7.1e3]);
     GPSNameList(end + 1) = "SDH";
-    set(gca, 'XTickLabel', [], 'YTickLabel', []);
+    % set(gca, 'XTickLabel', [], 'YTickLabel', []);
+    set(gca, 'FontSize', 24)
+    ax = gca;
+    ax.XTickLabel = ax.XTick / 1000;
+    ax.YTickLabel = ax.YTick / 1000;
+    xlabel("Easting (km)", 'FontSize', 30);
+    ylabel("Northing (km)", 'FontSize', 30);
     
     cxy = llh2local(coast_new', [-155.2784, 19.4073]);
     cxy = cxy * 1000;

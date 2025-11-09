@@ -177,24 +177,23 @@ roman_parameters = [vert_sd_HMM, vert_sd_HMM/(aspect_ratio_HMM), 90, 0, 0, 0, -9
     vert_sd_SC, vert_sd_SC/(aspect_ratio_SC), 90, 136, -200, -1.9e3,-3.2e3 - vert_sd_SC, -1e6];
 
 % Variable sequence: FIX VOLUME BOUNDS
-% ["dpHMM_insar", "dpHMM_gps", "volHMM", 'xHMM', 'yHMM', "zHMM" (from top of spheroid), 
+% ["dpHMM_insar", "dpHMM_gps", "volHMM", 'xHMM', 'yHMM', "zHMM" (from top of spheroid), alpha_HMM
 % xSC, ySC, dSC, "SC aspect ratio", "dip", strike, "dpSC_insar", "dpSC_gps", volSC]
 % yHMM lb used to be -0.5e3 + npitloc(2)
 % Old:
-lb = [-5e7, -5e7, 1e8, -5e2, -2e3 + npitloc(2), -2e3, 0.8, ...
-    0.7e3, -2.9e3, -4.6e3, 0.05, 40, 100, -5e7, -5e7, 2.4e9]; 
-ub = [1e6, 1e6, 3e10, 0.5e3 + npitloc(1), 0.5e3 + npitloc(2), -3e2, 2.0, ...
-     1.8e3, -2.0e3, -2.9e3, 1, 90, 180, 1e6, 1e6, 20e9]; 
+% lb = [-5e7, -5e7, 1e8, -5e2, -0.55e3 + npitloc(2), -2e3, 0.8, ...
+%     0.7e3, -2.9e3, -4.6e3, 0.05, 40, 100, -5e7, -5e7, 2.0e9]; 
+% ub = [1e6, 1e6, 3e10, 0.5e3 + npitloc(1), 0.5e3 + npitloc(2), -3e2, 2.0, ...
+%      1.8e3, -2.0e3, -2.9e3, 1, 90, 180, 1e6, 1e6, 20e9]; 
 
-% Inferred from kyle / taiyi:
-% lb = [-5e7, -5e7, 1e8, -100, 0, -1.3e3, ...
-%     -2.5e3 + npitloc(1), -3.4e3 + npitloc(2), -4.7e3, 0.05, 40, 100, -5e7, -5e7, 3e9];
-% 
-% ub = [1e6, 1e6, 1e10, 200, 400, -200, ...
-%     2.5e3 + npitloc(2), -1e3 + npitloc(2), -2.7e3, 0.3, 90, 180, 1e6, 1e6, 20e9];
+% Inferred from kyle / taiyi (see spreadsheet):
+lb = [-5e7, -5e7, 1e8, -100, 0, -16e2, 0.8, ...
+    -2.7e3, -2.8e3, -4.7e3, 0.1, 45, 0, -5e7, -5e7, 2.0e9]; 
+ub = [1e6, 1e6, 3e10, 227, 1050, -5e2, 1.8, ...
+     2.2e3, -0.75e3, -2.7e3, 1, 90, 180, 1e6, 1e6, 20e9]; 
 
 % Save figures for export
-saveFigs = false;
+saveFigs = true;
 
 %% Loading in InSAR data for geometry inversion
 % All insar data was created using scripts in the "InSAR processing" folder
@@ -259,7 +258,7 @@ block_size = [blocks_asc, blocks_desc];
 %% MCMC Static inversion
 paramNames = {'dpHMM_insar', 'dpHMM_gps', 'volHMM', 'xHMM', 'yHMM', 'dHMM', 'alphaHMM' ...
     'xSC', 'ySC', 'dSC', 'alphaSC', 'dipSC', 'strikeSC', 'dpSC_insar', 'dpSC_gps', 'volSC'};
-ntrials = 1e5; % Customize to get convergence
+ntrials = 1e6; % Customize to get convergence
 
 % Testing GPS and prior weights.
 gps_weights = linspace(4e1, 8e1, 10);
@@ -276,7 +275,8 @@ posteriors_list = zeros(length(paramNames), ntrials - 4e3 + 1, length(gps_weight
 optParams_list = zeros(length(paramNames), length(gps_weights));
 l_curve_points = zeros(3,length(gps_weights));
 
-runMCMC = true;
+runMCMC = false;
+subsample = false;
 
 % For loop to create L curve
 % for i = 1:length(gps_weights)
@@ -284,13 +284,33 @@ runMCMC = true;
 prior_params = taiyi_parameters;
 prior_params(7) = prior_params(7) + prior_params(1);
 if(runMCMC)
-    [optParams, posterior, gps_l2, insar_l2, prior_l2] = optimize_SC_MCMC(prior_params, lb, ub, xopt, ...
+    [optParams, posterior, L_keep, gps_l2, insar_l2, prior_l2] = optimize_SC_MCMC(prior_params, lb, ub, xopt, ...
         yopt, zopt, u1d', insarx, insary, insaru_full', look, insar_lengths, sparse(cinv_full), daily_inv_std, ...
-        nanstatend, ntrials, gps_weight, prior_weight, paramNames, saveFigs);
+        nanstatend, ntrials, gps_weight, prior_weight, paramNames, subsample, saveFigs); % subsample set to true
     optParams = real(optParams');
-    save Data/MCMC_1e6_SCvol.mat optParams posterior gps_l2 insar_l2 prior_l2;
+    save Data/MCMC_1e6_SCvol_topbnd.mat optParams posterior L_keep gps_l2 insar_l2 prior_l2;
 else
-    load Data/MCMC_vars_1e6_allparams_nodpineq.mat;
+    % load Data/MCMC_vars_1e6_allparams_nodpineq.mat;
+    load Data/MCMC_1e6_SCvol.mat;
+    [~, ind] = max(L_keep);
+    optParams = posterior(:, ind)';
+end
+
+if(subsample)
+    subsample_inds = [5, 6, 14, 15];
+    subsample_bnds = [0, 0.4e3; -2e3, -0.5e3; -10e6, 0; -10e6, 0];
+    subsample_lower = subsample_bnds(:,1);
+    subsample_upper = subsample_bnds(:,2);
+    posterior_subset = posterior(subsample_inds, :);
+    within_bounds = (posterior_subset >= subsample_lower) & (posterior_subset <= subsample_upper);
+    selection_mask = all(within_bounds, 1);
+    posterior = posterior(:,selection_mask);
+
+    % Select new MAP parameters
+    p = 0.01; % 5 % neighbourhood
+    thresh = prctile(real(L_keep(selection_mask)), 100*(1-p));
+    idxTop = L_keep(selection_mask) >= thresh;
+    optParams = mean(real(posterior(:, idxTop)), 2);
 end
 
 % More L curve stuff
@@ -392,6 +412,9 @@ plotParamNames = {
 unitScaling = [1e-6, 1e-6, 1e-9, 1e-3, 1e-3, 1e-3, 1, ...
     1e-3, 1e-3, 1e-3, 1, 1, 1, 1e-6, 1e-6, 1e-9];
 
+histlims = [-50, 0; -40, 0; 0, 20; -0.1, 0.2; 0, 0.4; -1.5, -0.5; 1.3, 1.8; ...
+    0, 2; -2.8, -2.0; -4.5, -3; 0.1, 0.6; 50, 80; 100, 180; -40, 0; -40, 0; 2, 15];
+
 figure(5);
 clf;
 tl = tiledlayout(4,4,'Padding','compact', 'TileSpacing','compact');
@@ -427,11 +450,12 @@ for i = 1:length(paramNames)
     p_prior = p_prior / s;
     
     % Prior PDF in dark gray dashed 
-    if(i ~= 13 && i ~= 14)
+    if(i ~= 14 && i ~= 15 && i ~= 16)
         hPrior = plot(xGrid, p_prior, '--', 'Color',[0.3 0.3 0.3], 'LineWidth',2.5);
     end
     
-    xlim([lb(i)*s, ub(i)*s]);
+    %xlim([lb(i)*s, ub(i)*s]);
+    xlim([histlims(i, 1), histlims(i, 2)]);
     % Aesthetics 
     grid on;
     title(name, 'Interpreter','latex', 'FontSize', 30, "FontWeight","bold");
@@ -449,16 +473,16 @@ for i = 1:length(paramNames)
 end
 
 % Manually add legend to empty tile (tile 16 in a 4x4 grid)
-% axLegend = nexttile(15); % explicitly go to the 16th tile
+axLegend = nexttile(16); % explicitly go to the 16th tile
 % axis(axLegend, 'off');   % make this tile invisible
 
 % Create legend manually
-% leg = legend(axLegend, [hPost, hMLE, hPrior], ...
-%        {'Posterior PDF', 'MLE estimate', 'Prior PDF'}, ...
-%        'FontSize', 24, 'Box', 'on');
-% 
-% set(leg, 'Units', 'normalized', 'Position', [0.793, 0.212, 0.172, 0.1]);
-% hold off;
+leg = legend(axLegend, [hPost, hMLE, hPrior], ...
+       {'Posterior PDF', 'MAP estimate', 'Prior PDF'}, ...
+       'FontSize', 18, 'Box', 'on');
+
+set(leg, 'Units', 'normalized');%, 'Position', [0.793, 0.212, 0.172, 0.1]);
+hold off;
 
 if saveFigs
     exportgraphics(tl, './PaperFigs/geo_hist.png', 'Resolution', 500);
@@ -594,8 +618,8 @@ dp(:, 1) = fillmissing(dp(:, 1), "makima", 1);
 
 %% Error analysis
 
-N_draws = 20;
-N_noise = 5;
+N_draws = 250;
+N_noise = 1;
 
 disp("Getting errors...")
 [dp_low, dp_high, u_low, u_high] = GetErrors(N_draws, N_noise, posterior, paramDists, ntime, ux, uy, uz, tiltx, tilty, dispstd, ...
@@ -650,24 +674,18 @@ collapset = D.gps_info.t_events(26:end);
 collapset = decyear(datetime(collapset, 'ConvertFrom', 'datenum', 'Format', 'dd-MM-yy'));
 % [ampHMM, ampSC] = ExtractCollapseAmplitude([dp(:, 1)'; dp(:, 2)'], t, collapset, t(3) - t(2));
 
-%% Make synthetic insar data based on optimized geometry
-ind = 1:(insar_lengths(1));
-% ind = (insar_lengths(1) + 1):sum(insar_lengths);
-insaru_pred = spheroid(optimizedM(1:8), [insarx(ind); insary(ind); zeros(size(insarx(ind)))], 0.25, 3.08*10^9) + ...
-    spheroid(optimizedM(9:end), [insarx(ind); insary(ind); zeros(size(insarx(ind)))], 0.25, 3.08*10^9);
-insaru_pred = insaru_pred' * look(:,1);
 
 %% Plot shear stress change
 nu = 0.25;
 mu = 3.08*10^9;
-R = 700; % m
-H = 500; % m
+R = 900; % m
+H = 800; % m
 g = 9.8; % m/s^2
 rho_c = 2500; % kg/m^3
 
 % Using equation 1 (assuming dv/dt = 0) in PNAS paper:
 
-tau_pnas = R * rho_c * g / 2 - R/(2 * H) * dp(:,1) * optimizedM(8);
+tau_pnas = - R/(2 * H) * dp(:,1) * optimizedM(8);
 %
 figure(3); clf;
 hold on;
@@ -676,14 +694,34 @@ legend();
 ylabel("Average tau (MPa)")
 xlabel("Time"); axis square;
 %%
-makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, insarx(ind), insary(ind), insaru_full(ind), insaru_pred, block_size(ind), look(:,1), tiltx, tilty, usim, t, nanstatend, ...
+makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilty, usim, t, nanstatend, ...
     nanstatbeginning, finalindex, collapset, dp, dp_low, dp_high, tau_pnas, optParams, optimizedM, GPSNameList, gTiltHMM, ...
     gTiltSC, xtilt, ytilt, tiltreduced, radscale, coast_new, taiyi_parameters, 3, ntrials, offsets, saveFigs);
 
 %% Insar plotting
+% Set if we want to plot the ascending or descending track with insarmode
+insarmode = "desc";
+% make predicted insar data
+if(insarmode == "asc")
+    ind = (insar_lengths(1) + 1):sum(insar_lengths);
+    insaru_pred = real(spheroid(optimizedM(1:8), [insarx(ind); insary(ind); zeros(size(insarx(ind)))], 0.25, 3.08*10^9) + ...
+        spheroid(optimizedM(9:end), [insarx(ind); insary(ind); zeros(size(insarx(ind)))], 0.25, 3.08*10^9));
+    insaru_pred = insaru_pred' * look(:,2);
+else
+    ind = 1:(insar_lengths(1));
+    insaru_pred = real(spheroid(optimizedM(1:8), [insarx(ind); insary(ind); zeros(size(insarx(ind)))], 0.25, 3.08*10^9) + ...
+        spheroid(optimizedM(9:end), [insarx(ind); insary(ind); zeros(size(insarx(ind)))], 0.25, 3.08*10^9));
+    insaru_pred = insaru_pred' * look(:,1);
+end
+
 cLimits = [-1.55, 0.55];
 opacity = 0.7;
 cmap = turbo;
-plot_insar_new(insarx(ind), insary(ind), insaru_full(ind) - insaru_pred', block_size(ind), look(:,1), x, y, u1d, u1d, nanstatend, ...
-radscale, 31, GPSNameList, optimizedM, coast_new,cLimits, opacity, saveFigs);
+% Set if x and y axis labels are on
+xon = true; yon = false;
+% Set if colorbar is on
+con = true;
+
+plot_insar_new(insarx(ind), insary(ind), insaru_full(ind) - insaru_pred', block_size(ind), look, x, y, u1d, u1d, xon, yon, con, ...
+    31, GPSNameList, optimizedM, coast_new,cLimits, opacity, saveFigs, insarmode);
 %  - insaru_pred' insaru_full(ind)

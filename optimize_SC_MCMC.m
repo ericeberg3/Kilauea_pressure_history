@@ -1,9 +1,10 @@
-function [optParams, posterior, gps_l2, insar_l2, prior_l2] = optimize_SC_MCMC(m_known, lb, ub, xopt, yopt, zopt, u1d, ...
+function [optParams, posterior, L_keep, gps_l2, insar_l2, prior_l2] = optimize_SC_MCMC(m_known, lb, ub, xopt, yopt, zopt, u1d, ...
      insarx, insary, insaru, look, insar_lengths, cinv_full, invStdPWRL, nanstatbeginning, ...
-     ntrials, gps_weight, prior_weight, paramNames, saveFigs)
+     ntrials, gps_weight, prior_weight, paramNames, subsample, saveFigs)
 
 GPS_std = 1./invStdPWRL;
 priormeans = get_full_m(m_known, [], false, "insar");
+if(any(priormeans > ub) || any(priormeans < lb)); error("Initial guess is not within bounds"); end
 % priormeans = priormeans + 0.1*randn(1,6) .* priormeans;
 % paramNames = ["HMM volume", "dpHMM", "vert semi-diameter", "horiz semi-diameter", "dip", "dpSC"];
 
@@ -18,7 +19,7 @@ end
 % xstep = 0.02*ones(1,6); % 0.02
 % xstep(4) = 0.007; % horiz semi-diam 
 
-xstep = 4e-2*ones(1,size(bnds,1)); % 4e-2
+xstep = 2.5e-2*ones(1,size(bnds,1)); % 4e-2
 
 [x_keep, L_keep, count, gps_l2, insar_l2, prior_l2] = mcmc('create_MCMC_data',[u1d(:);insaru(:)],priormeans,xstep, ...
     bnds, sigma, cinv_full, ntrials, gps_weight, prior_weight, paramNames,...
@@ -26,16 +27,26 @@ xstep = 4e-2*ones(1,size(bnds,1)); % 4e-2
 
 burn = 4e3;
 
-% Store results (OLD METHOD JUST SELECT LARGEST LL): 
-% [~, idx] = max(L_keep(burn:end));  % Index of the highest log-likelihood
-% optParams = x_keep(:, idx);
+% Store results (SELECT LARGEST LL): 
+[~, idx] = max(L_keep(burn:end));  % Index of the highest log-likelihood
+optParams = x_keep(:, idx);
 posterior = x_keep(:, burn:end);
+if(subsample)
+    subsample_inds = [5, 6, 14, 15];
+    subsample_bnds = [0, 0.4e3; -2e3, -0.5e3; -10e6, 0; -10e6, 0];
+    subsample_lower = subsample_bnds(:,1);
+    subsample_upper = subsample_bnds(:,2);
+    posterior_subset = posterior(subsample_inds, :);
+    within_bounds = (posterior_subset >= subsample_lower) & (posterior_subset <= subsample_upper);
+    selection_mask = all(within_bounds, 1);
+    posterior = posterior(:,selection_mask);
+end
 
 % Top 1% of loc likelihoods
-p = 0.01;                              % 5 % neighbourhood
-thresh = prctile(real(L_keep(burn:end)), 100*(1-p));
-idxTop = L_keep(burn:end) >= thresh;
-optParams = mean(real(posterior(:, idxTop)), 2);
+% p = 0.01;                              % 5 % neighbourhood
+% thresh = prctile(real(L_keep(burn:end)), 100*(1-p));
+% idxTop = L_keep(burn:end) >= thresh;
+% optParams = mean(real(posterior(:, idxTop)), 2);
 
 
 %% Plotting
@@ -73,7 +84,7 @@ num_top_elements = ceil(0.1 * length(L_keep));
 
 % Get the indices of the top 10% values
 top_indices = sorted_indices(1:num_top_elements);
-
+L_keep = L_keep(burn:end);
 % figure(4);
 % clf;
 % plot(x_keep(1, top_indices) .* x_keep(2, top_indices), (4/3) * pi * x_keep(3, top_indices) .* (x_keep(4, top_indices)).^2 .* x_keep(6, top_indices), '.')
