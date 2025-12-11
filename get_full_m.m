@@ -49,7 +49,7 @@ function m = get_full_m(prior, opt_params, forward, pressure_type)
         
     % Get optimization result vector from an inputted m vector
     else
-        m = real([prior(8), prior(8), (4/3) * pi * prior(1) * prior(2)^2, prior(5), prior(6), prior(7), prior(1)/prior(2), ...
+        m = real([prior(8), prior(8), (4/3) * pi * prior(1) * prior(2)^2, prior(5), prior(6), prior(7) + prior(1), prior(1)/prior(2), ...
             prior(13:15), prior(9)/prior(10), prior(11:12), prior(end), prior(end), (4/3) * pi * prior(9) * prior(10)^2]);
     end
 

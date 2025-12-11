@@ -59,7 +59,7 @@ complete_posterior(7,:) = full_posterior(7,:); % -full_posterior(5,:) + taiyi_pa
 complete_posterior(8,:) = full_posterior(1, :); % dpHMM take insar
 mu_dist = full_posterior(end,:); % mu is in units log10(Pa)
 
-SC_vol = full_posterior(end-1);
+SC_vol = full_posterior(end-1,:);
 alpha_SC = full_posterior(8,:); 
 % optParams(3) * ones(1, length(full_posterior(7,:))); 
 opt_vert_sd = (3/(4*pi) .* SC_vol .* (alpha_SC.^2)).^(1/3);
@@ -156,16 +156,16 @@ parfor i = 1:N_draws
         % Generate noise for each data
         rw_east_noise = mvnrnd(zeros(length(C_rw), 1), C_rw);
         rw_north_noise = mvnrnd(zeros(length(C_rw), 1), C_rw);
-        gps_e_noise = normrnd(0,gps_sigma(1),[1,length(ux)]);
-        gps_n_noise = normrnd(0,gps_sigma(2),[1,length(ux)]);
-        gps_u_noise = normrnd(0,gps_sigma(3),[1,length(ux)]);
+        gps_e_noise = normrnd(0,gps_sigma(1),[size(ux,1),length(ux)]);
+        gps_n_noise = normrnd(0,gps_sigma(2),[size(ux,1),length(ux)]);
+        gps_u_noise = normrnd(0,gps_sigma(3),[size(ux,1),length(ux)]);
     
         % Add generated noise to each data
-        tilte_noised = tilte_pred;% + rw_east_noise;
-        tiltn_noised = tiltn_pred;% + rw_north_noise;
-        ux_noised = ux_pred;% + gps_e_noise;
-        uy_noised = uy_pred;% + gps_n_noise;
-        uz_noised = uz_pred;% + gps_u_noise;
+        tilte_noised = tilte_pred + rw_east_noise;
+        tiltn_noised = tiltn_pred + rw_north_noise;
+        ux_noised = ux_pred + gps_e_noise;
+        uy_noised = uy_pred + gps_n_noise;
+        uz_noised = uz_pred + gps_u_noise;
         
         ux_dist(i, j, :, :) = ux_noised;
         uy_dist(i, j, :, :) = uy_noised;
@@ -202,11 +202,56 @@ clear gHMM_samp gSC_samp gTiltHMM_samp gTiltSC_samp temp
 
 %% Now pick the 10th and 90th percentile points for each sample
 % Get conf. interval for pressure
-pLow  = prctile(dp_dist, 5, 1)';  % 10th percentile across columns
-pHigh = prctile(dp_dist, 95, 1)';  % 90th percentile
+pLow  = prctile(dp_dist, 5, 1)';  % 5th percentile across columns
+pHigh = prctile(dp_dist, 95, 1)';  % 95th percentile
 
 dp_low = real([pLow(1:length(tiltx)), pLow((length(tiltx) + 1):(2*length(tiltx)))]);
 dp_high = real([pHigh(1:length(tiltx)), pHigh((length(tiltx) + 1):(2*length(tiltx)))]);
+
+
+% Plot pressure histories and geometry diffs where the dp_HMM(t=end) is < 5MPa
+% lowdrop_idx = (dp_dist(:,ntime) > - 5) & (dp_dist(:,ntime) < 0);
+% subsamp_geo = geo_samples(:,lowdrop_idx(1:end));
+% subsamp_vhmm = (4/3) * pi * subsamp_geo(1,:) .* subsamp_geo(2,:).^2;
+% subsamp_vsc = (4/3) * pi * subsamp_geo(9,:) .* subsamp_geo(10,:).^2;
+% 
+% disp("Mean HMM Vol (<5MPa drop): " + string(mean(subsamp_vhmm)) + " Mean SC vol: " + string(mean(subsamp_vsc)));
+% mean_sub_params = get_full_m(mean(subsamp_geo, 2)', optParams, false, "insar");
+% 
+% optM = mean_sub_params;
+
+% diff_percent = ((mean_sub_params - optParams) ./ optParams) * 100;
+
+% figure(101); clf;
+% b = bar(diff_percent);
+% b.FaceColor = 'flat';
+% 
+% % Color code: Red for positive diff, Blue for negative
+% for i = 1:length(diff_percent)
+%     if diff_percent(i) < 0
+%         b.CData(i,:) = [0 0.4470 0.7410]; % Blue
+%     else
+%         b.CData(i,:) = [0.8500 0.3250 0.0980]; % Red
+%     end
+% end
+% 
+% yscale('linear')
+% ylabel('Percent Difference (%)');
+% title('Relative Parameter Deviation');
+% grid on;
+% 
+% 
+% ax = gca;
+% ax.XAxis.FontSize = 20;
+% 
+% % Apply labels from your previous code context
+% xticks(1:16);
+% xticklabels(paramNames); % Replace 'labels' with your paramNames cell array
+% xtickangle(45);
+% 
+% figure;
+% plot(dp_dist(lowdrop_idx, 1:ntime)')
+% ylabel("Pressure (MPa)");
 
 
 % Get conf interval for displacements
@@ -258,6 +303,33 @@ u_high(1:S,3,:) = uz_p90;
 u_high(end,1,:) = tiltx_p90;
 u_high(end,2,:) = tilty_p90;
 
+% PLOT < 5MPa SAMPLES
+% % 1. Extract mean pressure history for the subset
+% dp_mean_hist = mean(dp_dist(lowdrop_idx, :), 1);
+% dpHMM_mean   = dp_mean_hist(1:ntime);
+% dpSC_mean    = dp_mean_hist(ntime+1:end);
+% 
+% % 2. Generate Green's functions for the mean geometry
+% [gHMM_m, gSC_m] = creategreens(mean_sub_params(1:8), mean_sub_params(9:end), 3.08e9);
+% [gTiltHMM_m, gTiltSC_m] = createtiltgreens(mean_sub_params(1:8), mean_sub_params(9:end), dtheta, false, 3.08e9);
+% 
+% % 3. Construct usim [Time x 3 x Stations]
+% nstat = size(ux, 1);
+% usim  = zeros(ntime, 3, nstat + 1); % +1 for the Tilt/SDH station
+% 
+% for t_idx = 1:ntime
+%     % GPS Displacements: [3 x nstat]
+%     disp_t = (gHMM_m .* dpHMM_mean(t_idx)) + (gSC_m .* dpSC_mean(t_idx));
+%     usim(t_idx, :, 1:nstat) = disp_t;
+% 
+%     % Tilt/SDH: [3 x 1] (Append 0 for the 'Up' component)
+%     tilt_t = (gTiltHMM_m .* dpHMM_mean(t_idx)) + (gTiltSC_m .* dpSC_mean(t_idx));
+% 
+%     % FIX: Use reshape to force 1x2 row, then use comma for horizontal concat
+%     usim(t_idx, :, nstat + 1) = [reshape(tilt_t, 1, 2), 0]; 
+% end
+
+% make_disp_plot(1:ntime, 1, GPSNameList, ux, uy, uz, usim, u_low, u_high, tiltx, tilty, true)
 
 %% Make a plot of all the diff pressure histories
 figure(1);

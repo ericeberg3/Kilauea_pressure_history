@@ -11,6 +11,8 @@ load('data/hawaii_line_new.mat', 'coast_new', 'new_pit')
 load('data/sdh_clean.mat')
 daily_GPS = readtable('data/daily_gps_mult_stations.csv');
 
+addpath('./Plotting functions/')
+
 %% Creating GPS names and setting up x and y coordinates
 GPSNameList = ["69FL","92YN","AHUP","BDPK","BYRL","CNPK","CRIM","DEVL","OUTL","PUHI","PWRL","UWEV","V120","VSAS", "CALS"];
 tiltNameList = ['SDH'];
@@ -189,8 +191,8 @@ roman_parameters = [vert_sd_HMM, vert_sd_HMM/(aspect_ratio_HMM), 90, 0, 0, 0, -9
 % Inferred from kyle / taiyi (see spreadsheet):
 lb = [-5e7, -5e7, 1e8, -100, 0, -16e2, 0.8, ...
     -2.7e3, -2.8e3, -4.7e3, 0.1, 45, 0, -5e7, -5e7, 2.0e9]; 
-ub = [1e6, 1e6, 3e10, 227, 1050, -5e2, 1.8, ...
-     2.2e3, -0.75e3, -2.7e3, 1, 90, 180, 1e6, 1e6, 20e9]; 
+ub = [1e6, 1e6, 3e10, 227, 1050, -7.5e2, 1.8, ...
+     2.2e3, -0.45e3, -2.7e3, 1, 90, 180, 1e6, 1e6, 20e9]; 
 
 % Save figures for export
 saveFigs = true;
@@ -258,134 +260,96 @@ block_size = [blocks_asc, blocks_desc];
 %% MCMC Static inversion
 paramNames = {'dpHMM_insar', 'dpHMM_gps', 'volHMM', 'xHMM', 'yHMM', 'dHMM', 'alphaHMM' ...
     'xSC', 'ySC', 'dSC', 'alphaSC', 'dipSC', 'strikeSC', 'dpSC_insar', 'dpSC_gps', 'volSC'};
-ntrials = 1e6; % Customize to get convergence
+ntrials = 2e5; % Customize to get convergence
 
 % Testing GPS and prior weights.
-gps_weights = linspace(4e1, 8e1, 10);
-prior_weights = linspace(3e2, 1e3, 10);
+% gps_weights = linspace(4e1, 8e1, 10);
+% prior_weights = linspace(3e2, 1e3, 10);
+gps_weights = linspace(0.5e1, 1.5e2, 10);
+prior_weights = linspace(1e2, 1e4, 10);
+
 gps_weight = 6.7e1; % Optimal weight based on L curve
 prior_weight = 5.3e2; % Optimal weight based on L curve
+% burn = 0.5e3;
+burn = 4e3;
 
 delete(gcp('nocreate'));
 
-% Set up log likelihood lists for L curve creation. 
-gps_l2s = zeros(1,length(gps_weights));
-insar_l2s = zeros(1,length(gps_weights));
-posteriors_list = zeros(length(paramNames), ntrials - 4e3 + 1, length(gps_weights));
-optParams_list = zeros(length(paramNames), length(gps_weights));
-l_curve_points = zeros(3,length(gps_weights));
-
+% --- Set if we want to run MCMC, plot the L curve, and the type of L curve
+% to create --- %
 runMCMC = false;
-subsample = false;
-
+run_L_curve = false;
+l_curve_type = "prior"; % 'prior' to test prior weights, 'gps' to test gps weights
+% for l_curve_type = ["prior", "gps"]
 % For loop to create L curve
-% for i = 1:length(gps_weights)
-
-prior_params = taiyi_parameters;
-prior_params(7) = prior_params(7) + prior_params(1);
-if(runMCMC)
-    [optParams, posterior, L_keep, gps_l2, insar_l2, prior_l2] = optimize_SC_MCMC(prior_params, lb, ub, xopt, ...
-        yopt, zopt, u1d', insarx, insary, insaru_full', look, insar_lengths, sparse(cinv_full), daily_inv_std, ...
-        nanstatend, ntrials, gps_weight, prior_weight, paramNames, subsample, saveFigs); % subsample set to true
-    optParams = real(optParams');
-    save Data/MCMC_1e6_SCvol_topbnd.mat optParams posterior L_keep gps_l2 insar_l2 prior_l2;
+n_l_curve = length(gps_weights);
+if(~run_L_curve)
+    n_l_curve = 1; 
 else
-    % load Data/MCMC_vars_1e6_allparams_nodpineq.mat;
-    load Data/MCMC_1e6_SCvol.mat;
-    [~, ind] = max(L_keep);
-    optParams = posterior(:, ind)';
+    % Set up log likelihood lists for L curve creation. 
+    gps_l2s = zeros(1,length(gps_weights));
+    insar_l2s = zeros(1,length(gps_weights));
+    posteriors_list = zeros(length(paramNames), ntrials - burn + 1, length(gps_weights));
+    optParams_list = zeros(length(paramNames), length(gps_weights));
+    l_curve_points = zeros(3,length(gps_weights));
 end
 
-if(subsample)
-    subsample_inds = [5, 6, 14, 15];
-    subsample_bnds = [0, 0.4e3; -2e3, -0.5e3; -10e6, 0; -10e6, 0];
-    subsample_lower = subsample_bnds(:,1);
-    subsample_upper = subsample_bnds(:,2);
-    posterior_subset = posterior(subsample_inds, :);
-    within_bounds = (posterior_subset >= subsample_lower) & (posterior_subset <= subsample_upper);
-    selection_mask = all(within_bounds, 1);
-    posterior = posterior(:,selection_mask);
+for i = 1:n_l_curve
+    prior_params = taiyi_parameters;
+    % Move taiyi depth down a bit
+    prior_params(7) = prior_params(7) - 300;
 
-    % Select new MAP parameters
-    p = 0.01; % 5 % neighbourhood
-    thresh = prctile(real(L_keep(selection_mask)), 100*(1-p));
-    idxTop = L_keep(selection_mask) >= thresh;
-    optParams = mean(real(posterior(:, idxTop)), 2);
+    % Check if we are doing L curve analysis. If so set weight
+    % appropriately
+    if(l_curve_type == "prior"); prior_weight = prior_weights(i);
+    else; prior_weight = 0; gps_weight = gps_weights(i); end
+    
+    if(runMCMC)
+        [optParams, posterior, L_keep, gps_l2, insar_l2, prior_l2] = optimize_SC_MCMC(prior_params, lb, ub, xopt, ...
+            yopt, zopt, u1d', insarx, insary, insaru_full', look, insar_lengths, sparse(cinv_full), daily_inv_std, ...
+            nanstatend, ntrials, gps_weight, prior_weight, paramNames, burn, saveFigs); % subsample set to true
+        optParams = real(optParams');
+
+        if(~run_L_curve)
+            save Data/MCMC_1e6_SCvol_topbnd.mat optParams posterior L_keep gps_l2 insar_l2 prior_l2;
+        else
+            l_curve_points(1,i) = gps_l2;
+            l_curve_points(2,i) = insar_l2;
+            l_curve_points(3,i) = prior_l2;
+    
+            posteriors_list(:, :, i) = posterior;
+            optParams_list(:, i) = optParams;
+        end
+    else
+        % load Data/MCMC_vars_1e6_allparams_nodpineq.mat;
+        load Data/MCMC_1e6_SCvol_topbnd.mat;
+        [~, ind] = max(L_keep);
+        optParams = posterior(:, ind)';
+    end
+    
+end
+% Save and plot l curve data
+if(run_L_curve)
+    save("Data/l_curve_data_" + l_curve_type + ".mat", "l_curve_points", "l_curve_type", "prior_weights", "gps_weights");
+    % load Data/l_curve_data_prior.mat;
+    posterior = squeeze(posteriors_list(:, :, end));
+    optParams = optParams_list(:, end)';
+    disp(gps_weights(end));
+    plotLcurve(l_curve_points, l_curve_type, prior_weights, gps_weights);
 end
 
-% More L curve stuff
-%     l_curve_points(1,i) = gps_l2;
-%     l_curve_points(2,i) = insar_l2;
-%     l_curve_points(3,i) = prior_l2;
-% 
-%     posteriors_list(:, :, i) = posterior;
-%     optParams_list(:, i) = optParams;
 % end
-
-
-% Save / load L curve data
-% save Data/l_curve_data_prior.mat l_curve_points;
-% load Data/l_curve_data_prior.mat;
-% posterior = squeeze(posteriors_list(:, :, i));
-% optParams = optParams_list(:, i)';
-% disp(gps_weights(end));
-
 
 % Get the full geometry parameters based on the optimization results:
 disp("GPS L2: " + gps_l2 + " InSAR L2: " + insar_l2);
 optimizedM = get_full_m(taiyi_parameters, optParams, true, "insar");
 
-% end
 
 %%
 % Show parameter table
 disp(array2table(optParams(:).', 'VariableNames',paramNames));
 % Make sure parameters are real
 optParams = real(optParams);
-
-% % L curve plotting 
-% % Prepare L-curve data, GPS vs. insar
-% % xl = l_curve_points(1,:);
-% % yl = l_curve_points(2,:);
-% % xl = zeros(100, 1);
-% % yl = zeros(100, 1);
-% 
-% % L-curve data, GPS + insar vs. prior
-% xl = l_curve_points(1,:) + l_curve_points(2,:);
-% yl = abs(l_curve_points(3,:));
-% 
-% % Scatter, mapping color to gps_weights
-% l_curve = figure(7); clf;
-% scatter_handle = scatter(xl, yl, 400, prior_weights, 'filled');
-% 
-% % Choose colormap and add colorbar
-% colormap(parula);
-% c = colorbar;               
-% c.Label.String = 'Prior Weight';
-% c.FontSize = 24;
-% 
-% % (Optional) fix the color limits if you want to highwlight a subset:
-% % caxis([min(gps_weights), max(gps_weights)]);
-% 
-% % Labels & title
-% % xlabel("GPS L2");
-% % ylabel("InSAR L2");
-% xlabel("GPS L2 Norm + InSAR L2 Norm", 'FontSize', 24);
-% ylabel("Prior Log Likelihood", 'FontSize', 24);
-% title("L-curve colored by prior weight", 'FontSize', 30);
-% axis square;
-% ax = gca;
-% ax.FontSize = 24;
-% 
-% % Set up interactive data cursor
-% dcm = datacursormode(gcf);
-% set(dcm, 'UpdateFcn', @(~, event_obj) ...
-%     sprintf('GPS L2: %.2e\nInSAR L2: %.2e\nGPS Weight: %.1e', ...
-%             event_obj.Position(1), ...
-%             event_obj.Position(2), ...
-%             gps_weights(event_obj.DataIndex)));
-% 
-% exportgraphics(l_curve, './PaperFigs/l_curve_prior.png', 'Resolution', 500);
 
 
 %% Plot histogram of each parameter
@@ -412,7 +376,7 @@ plotParamNames = {
 unitScaling = [1e-6, 1e-6, 1e-9, 1e-3, 1e-3, 1e-3, 1, ...
     1e-3, 1e-3, 1e-3, 1, 1, 1, 1e-6, 1e-6, 1e-9];
 
-histlims = [-50, 0; -40, 0; 0, 20; -0.1, 0.2; 0, 0.4; -1.5, -0.5; 1.3, 1.8; ...
+histlims = [-50, 0; -40, 0; 0, 20; -0.1, 0.2; 0, 0.4; -1.5, -0.75; 1.3, 1.8; ...
     0, 2; -2.8, -2.0; -4.5, -3; 0.1, 0.6; 50, 80; 100, 180; -40, 0; -40, 0; 2, 15];
 
 figure(5);
@@ -465,15 +429,22 @@ for i = 1:length(paramNames)
     cdf_values = cumtrapz(xGrid, p_prior);
     [cdf_u, ia] = unique(cdf_values);
     x_u = xGrid(ia);
-    lower_bound = interp1(cdf_u, x_u, 0.1);
-    upper_bound = interp1(cdf_u, x_u, 0.9);
-    fprintf('%s 90%% CI: [%.1e, %.1e], MLE = %.2e\n', ...
+
+    ci_vals = prctile(posterior(i, :), [5, 95]);
+    
+    % Apply unit scaling
+    lower_bound = ci_vals(1) * s;
+    upper_bound = ci_vals(2) * s;
+    
+    % Print result
+    fprintf('%s 90%% CI: [%.2e, %.2e], MLE = %.2e\n', ...
             name, lower_bound, upper_bound, optParams(i)*s);
     axis square
+    % xline(ci_vals(1) * s);
+    % xline(ci_vals(2) * s);
 end
 
-% Manually add legend to empty tile (tile 16 in a 4x4 grid)
-axLegend = nexttile(16); % explicitly go to the 16th tile
+axLegend = nexttile(16);
 % axis(axLegend, 'off');   % make this tile invisible
 
 % Create legend manually
@@ -497,11 +468,31 @@ disp("MCMC done");
 save("./Figures/optimizedM.mat");
 
 %% Plot correlation btwn parameters
+plotParamNames_nounit = {
+  '$\Delta p_{\mathrm{HMM}}^{\mathrm{InSAR}}$', ...
+  '$\Delta p_{\mathrm{HMM}}^{\mathrm{GPS}}$', ...
+  '$V_{\mathrm{HMM}}$', ...
+  '$x_{\mathrm{HMM}}$', ...
+  '$y_{\mathrm{HMM}}$', ...
+  '$d_{\mathrm{HMM}}$', ...
+  '$\alpha_{\mathrm{HMM}}$', ...
+  '$x_{\mathrm{SC}}$', ...
+  '$y_{\mathrm{SC}}$', ...
+  '$d_{\mathrm{SC}}$', ...
+  '$\alpha_{\mathrm{SC}}$', ...
+  '$\phi_{\mathrm{SC}}$', ...
+  '$\psi_{\mathrm{SC}}$', ...
+  '$\Delta p_{\mathrm{SC}}^{\mathrm{InSAR}}$', ...
+  '$\Delta p_{\mathrm{SC}}^{\mathrm{GPS}}$', ...
+  '$V_{\mathrm{SC}}$',
+};
 % assume posterior is already (nParams × nSamples)
 nparams = size(posterior,1);
-figure(12); clf;
+f = figure(12); clf;
 tl = tiledlayout(nparams,nparams,'Padding','tight','TileSpacing','tight');
 set(gcf,'Color','w');  % white background
+set(f, 'Units', 'pixels'); 
+set(f, 'Position', [100, 100, 1800, 1600]);
 
 numBins = 30;
 
@@ -525,8 +516,14 @@ for i = 1:nparams
         elseif i == j
             % 1D histogram on diagonal
             histogram(ax, posterior(i,:), numBins, 'FaceColor',[.2 .6 .5]);
-            title(ax, plotParamNames{i}, ...
-                  'Interpreter','latex','FontSize',16);
+            % title(ax, plotParamNames_nounit{i}, ...
+            %       'Interpreter','latex','FontSize',16);
+            text(ax, 0.5, 1.45, plotParamNames_nounit{i}, ...
+                'Units', 'normalized', ... 
+                'HorizontalAlignment', 'center', ...
+                'Interpreter', 'latex', ...
+                'FontSize', 28, ... % You can now make this huge without squishing
+                'FontWeight', 'bold');
             ax.YAxis.Visible = 'off';
         else
             % blank above diagonal
@@ -536,14 +533,14 @@ for i = 1:nparams
 
         % restore tick labels everywhere
         ax.XAxis.Visible = 'off';
-        
-        
+
+
 
         % only bottom row: add xlabel
         if i == nparams
-            ax.XLabel.String = plotParamNames{j};
+            ax.XLabel.String = plotParamNames_nounit{j};
             ax.XLabel.Interpreter = 'latex';
-            ax.XLabel.FontSize = 12;
+            ax.XLabel.FontSize = 20;
             ax.XAxis.Visible = 'on';
         else
             ax.XLabel.String = '';
@@ -551,9 +548,9 @@ for i = 1:nparams
 
         % only first column: add ylabel
         if j == 1
-            ax.YLabel.String = plotParamNames{i};
+            ax.YLabel.String = plotParamNames_nounit{i};
             ax.YLabel.Interpreter = 'latex';
-            ax.YLabel.FontSize = 12;
+            ax.YLabel.FontSize = 20;
             ax.YAxis.Visible = 'on';
         else
             ax.YLabel.String = '';
@@ -618,8 +615,8 @@ dp(:, 1) = fillmissing(dp(:, 1), "makima", 1);
 
 %% Error analysis
 
-N_draws = 250;
-N_noise = 1;
+N_draws = 200;
+N_noise = 5;
 
 disp("Getting errors...")
 [dp_low, dp_high, u_low, u_high] = GetErrors(N_draws, N_noise, posterior, paramDists, ntime, ux, uy, uz, tiltx, tilty, dispstd, ...
@@ -684,19 +681,23 @@ g = 9.8; % m/s^2
 rho_c = 2500; % kg/m^3
 
 % Using equation 1 (assuming dv/dt = 0) in PNAS paper:
-
-tau_pnas = - R/(2 * H) * dp(:,1) * optimizedM(8);
+% dp must be rescaled by the greens function pressure drop but that's
+% already dealt with for the error bnds.
+tau_pnas = - R/(2 * H) * dp(:,1) * optimizedM(8); 
+% Must convert the bnds from MPa to Pa
+tau_pnas_low = -R/(2 * H) * dp_low(:,1)*1e6;
+tau_pnas_high = -R/(2 * H) * dp_high(:,1)*1e6;
 %
-figure(3); clf;
-hold on;
-plot(tau_pnas .* 1e-6);
-legend();
-ylabel("Average tau (MPa)")
-xlabel("Time"); axis square;
+% figure(3); clf;
+% hold on;
+% plot(tau_pnas .* 1e-6);
+% legend();
+% ylabel("Average tau (MPa)")
+% xlabel("Time"); axis square;
 %%
 makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilty, usim, t, nanstatend, ...
-    nanstatbeginning, finalindex, collapset, dp, dp_low, dp_high, tau_pnas, optParams, optimizedM, GPSNameList, gTiltHMM, ...
-    gTiltSC, xtilt, ytilt, tiltreduced, radscale, coast_new, taiyi_parameters, 3, ntrials, offsets, saveFigs);
+    nanstatbeginning, finalindex, collapset, dp, dp_low, dp_high, tau_pnas, tau_pnas_low, tau_pnas_high, optParams, optimizedM, ...
+    GPSNameList, gTiltHMM, gTiltSC, xtilt, ytilt, tiltreduced, radscale, coast_new, taiyi_parameters, 3, ntrials, offsets, saveFigs);
 
 %% Insar plotting
 % Set if we want to plot the ascending or descending track with insarmode
@@ -714,7 +715,7 @@ else
     insaru_pred = insaru_pred' * look(:,1);
 end
 
-cLimits = [-1.55, 0.55];
+cLimits = [-1.55, 1.55];%0.55];
 opacity = 0.7;
 cmap = turbo;
 % Set if x and y axis labels are on
@@ -722,6 +723,6 @@ xon = true; yon = false;
 % Set if colorbar is on
 con = true;
 
-plot_insar_new(insarx(ind), insary(ind), insaru_full(ind) - insaru_pred', block_size(ind), look, x, y, u1d, u1d, xon, yon, con, ...
+plot_insar_new(insarx(ind), insary(ind), insaru_full(ind), block_size(ind), look, x, y, u1d, u1d, xon, yon, con, ...
     31, GPSNameList, optimizedM, coast_new,cLimits, opacity, saveFigs, insarmode);
 %  - insaru_pred' insaru_full(ind)

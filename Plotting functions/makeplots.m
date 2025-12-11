@@ -1,6 +1,6 @@
 function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilty, ...
     usim, t, nanstat, nanstatbeginning, finalindex, collapset, ...
-    dp, dp_low, dp_high, tau, optParams, optimizedM, GPSNameList, gTiltHMM, gTiltSC, xtilt, ytilt, tiltreduced, radscale, ...
+    dp, dp_low, dp_high, tau, tau_low, tau_high, optParams, optimizedM, GPSNameList, gTiltHMM, gTiltSC, xtilt, ytilt, tiltreduced, radscale, ...
     coast_new, taiyi_parameters, disptype, ntrials, offsets, saveFigs)
 
     % u1d = squeeze(u(:, :, end-finalindex));
@@ -55,25 +55,24 @@ function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilt
     sc_pressure  = dp(idx,2) * optimizedM(16) / 1e6;
     
     % Layout
-    tlo = tiledlayout(1,3,'TileSpacing','tight','Padding','tight');
+    tlo = tiledlayout(2,2,'TileSpacing','tight','Padding','tight');
     
     % ======================== 1) HMM subplot =================================
     ax1 = nexttile;  hold(ax1,'on'); 
     
-    % <<<<<< ORIGINAL PATCH / ERROR‑BAR CODE >>>>>>
     xPatch     = [tvec; flipud(tvec)];
     yPatch_HMM = [hmm_scale * dp_low(idx,1); ...
                   flipud(hmm_scale * dp_high(idx,1))];
     greyColor = [0.7, 0.7, 0.7];
     pressure_color = "#c70000";
+    pressure_color_rgb = [199,0,0];
     patch(ax1, xPatch, yPatch_HMM, greyColor, 'FaceAlpha', 0.5, 'EdgeColor', 'none');
-    % <<<<<< END COPY >>>>>>
     
     plot(ax1, tvec, hmm_scale*hmm_pressure,...
          'Color',pressure_color, 'LineWidth',2,'DisplayName','HMM Pressure');
     ax1.XAxis.FontSize = baseFont - 4;
     ax1.YAxis.FontSize = baseFont - 4;
-    ylabel('HMM Pressure (MPa)','FontSize',baseFont+2)
+    ylabel('Pressure Change [MPa]','FontSize',baseFont+2)
     title('Halemaʻumaʻu (HMM)', 'FontSize', baseFont+4)
     grid on; box on; axis square
     set(ax1,'LineWidth',1.4, 'YLim', [-15, 5]);
@@ -89,22 +88,61 @@ function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilt
          'Color',pressure_color,'LineWidth',2,'DisplayName','SC Pressure');
     ax2.XAxis.FontSize = baseFont - 4;
     ax2.YAxis.FontSize = baseFont - 4;
-    ylabel('SC Pressure (MPa)','FontSize',baseFont+2)
+    ylabel('Pressure Change [MPa]','FontSize',baseFont+2)
     title('South Caldera (SC)', 'FontSize', baseFont+4)
     grid on; box on; axis square;
-    set(ax2,'LineWidth',1.4)
+    set(ax2,'LineWidth',1.4);
 
 
     % ======================== 3) tau subplot ==================================
     ax3 = nexttile; hold(ax3, 'on');
+    yPatch_tau = [tau_high(idx); flipud(tau_low(idx))] .* 1e-6;
+    patch(ax3, xPatch, yPatch_tau, greyColor, 'FaceAlpha', 0.5, 'EdgeColor', 'none');
+
     plot(ax3, tvec, tau(idx) .* 1e-6, 'LineWidth', 2);
     grid on; box on; axis square;
     set(ax3, 'LineWidth', 1.4);
     ax3.XAxis.FontSize = baseFont - 4;
     ax3.YAxis.FontSize = baseFont - 4;
-    ylabel("Average Shear Stress (MPa)", 'FontSize', baseFont+2);
-    title("Average shear stress vs. time", 'FontSize', baseFont+4)
-    
+    ylabel("\Delta \tau [MPa]", 'FontSize', baseFont+2);
+    title("Average shear stress change vs. time", 'FontSize', baseFont+4)
+
+    % ========= P*V vs. time plot (both SC and HMM) =======
+    % First calculate the ratio between a unit pressure change and a unit
+    % volume change:
+    optM_unit = optimizedM(1:8);
+    optM_unit(8) = 1;
+    disp_p_change = sqrt(sum(real(spheroid(optM_unit, [0;0;0], 0.25, 3.08*10^9)).^2));
+    disp_v_change = sqrt(sum(real(spheroid(optM_unit, [0;0;0], 0.25, 3.08*10^9, 'volume')).^2));
+    vp_ratio_HMM = (disp_p_change/disp_v_change) * 1e-3; % (m/Pa)/(m/m^3) =  m^3/Pa
+
+    optM_unit = optimizedM(9:end);
+    optM_unit(8) = 1;
+    disp_p_change = sqrt(sum(real(spheroid(optM_unit, [0;0;0], 0.25, 3.08*10^9)).^2));
+    disp_v_change = sqrt(sum(real(spheroid(optM_unit, [0;0;0], 0.25, 3.08*10^9, 'volume')).^2));
+    vp_ratio_SC = (disp_p_change/disp_v_change) * 1e-3; % (m/Pa)/(m/m^3) =  m^3/Pa
+
+    hmm_vp = hmm_pressure * vp_ratio_HMM; % m^3/Pa * 1 km^3 / 1e9 m^3 * 1/(1e-6 MPa/Pa)
+    sc_vp  = sc_pressure * vp_ratio_SC;
+
+    sc_vp_low = dp_low(idx, 2) * vp_ratio_SC;
+    sc_vp_high = dp_high(idx, 2) * vp_ratio_SC;
+    yPatch_SC = [sc_vp_low; flipud(sc_vp_high)];
+
+
+    ax4 = nexttile; hold(ax4, 'on');
+    patch(ax4, xPatch, yPatch_SC, greyColor, 'FaceAlpha', 0.5, 'EdgeColor', 'none');
+    plot(ax4, tvec, hmm_vp, 'Color', [199, 160, 160]./255, 'LineWidth', 2, 'DisplayName', 'HMM');
+    plot(ax4, tvec, sc_vp, 'Color', pressure_color, 'LineWidth', 2, 'DisplayName', 'SC');
+    grid on; box on; axis square;
+    set(ax4, 'LineWidth', 1.4);
+    ax4.XAxis.FontSize = baseFont - 4;
+    ax4.YAxis.FontSize = baseFont - 4;
+    ylim(ax4, [-0.05, 0.005])
+    ylabel("Volume change [km^3]", 'FontSize', baseFont+2);
+    title("Volume change history", 'FontSize', baseFont+4)
+    % legend(ax4, "FontSize", baseFont, "Location", "southwest")
+
     %%  Collapse markers & amplitude calculation
     %   Put this block *after* the two plots are finished (but before exportgraphics).
     
@@ -145,12 +183,12 @@ function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilt
     avgAmpl_SC = median(abs(ampl_SC), 1, 'omitnan');
     ampl_ratio = abs(ampl_SC(:,1) ./ ampl_HMM(:,1));
     fprintf('Average HMM collapse amplitude  %.3f MPa, pressure drop = %.3f MPa, [%.3f, %.3f] \n', ...
-        avgAmpl_HMM(1), hmm_pressure(end), dp_low(end,1), dp_high(end,1));
+        avgAmpl_HMM(1), hmm_pressure(end), dp_low(end-finalindex,1), dp_high(end-finalindex,1));
     fprintf('Average SC collapse amplitude  %.3f MPa, pressure drop = %.3f MPa, [%.3f, %.3f] \n', ...
-        avgAmpl_SC(1), sc_pressure(end), dp_low(end,2), dp_high(end,2));
+        avgAmpl_SC(1), sc_pressure(end), dp_low(end-finalindex,2), dp_high(end-finalindex,2));
     fprintf('Amplitude ratio (SC/HMM) = %.3f \n', mean(ampl_ratio, 'omitnan'))
     fprintf(' SC pressure drop = %.3f MPa, [%.3f, %.3f] \n', sc_pressure(end), ...
-        dp_low(end,2), dp_high(end,2));
+        dp_low(end-finalindex,2), dp_high(end-finalindex,2));
     fprintf('Average shear stress drop: %.2e \n', median(ampl_tau, 'omitnan'));
     
     
@@ -470,7 +508,7 @@ print(gcf,'-dpng','-r200','./PaperFigs/disp_grid.png')
     clear GPSrms tiltrms
     
     %% Load in geometry
-    optimizedM = get_full_m(taiyi_parameters, optParams, true, "gps");
+    % optimizedM = get_full_m(taiyi_parameters, optParams, true, "gps");
     mHMM = optimizedM(1:8);
     mSC = optimizedM(9:end);
     
@@ -550,7 +588,7 @@ print(gcf,'-dpng','-r200','./PaperFigs/disp_grid.png')
     %     (u1d(:, 3) - u1d_LSQ(~nanstat, 3)), 'AutoScale', 'off', 'LineWidth',2.75, 'MaxHeadSize', 0.3, 'Color', '#4DBEEE', 'DisplayName', 'Residual');
     % Plot vert. displacement circles:
     theta = linspace(0, 2*pi, 50);  
-    verticalScale = 0.1e4; 
+    verticalScale = 0.2e4; 
     u1d_ind = 1;
     for k = 1:length(u1d_LSQ)
         if(~nanstat(k))
