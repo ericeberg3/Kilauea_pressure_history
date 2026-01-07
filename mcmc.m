@@ -167,11 +167,15 @@ end
 fprintf('\n');
 disp("Acceptance ratio: " + count/Niter)
 
-p        = 0.01;                              % 5 % neighbourhood
-thresh   = prctile(real(L_keep(burn:end)), 100*(1-p));
-idxTop   = L_keep(burn:end) >= thresh;
+% p        = 0.01;                              % 5 % neighbourhood
+% thresh   = prctile(real(L_keep(burn:end)), 100*(1-p));
+% idxTop   = L_keep(burn:end) >= thresh;
+% x_keep_burnt = x_keep(:, burn:end);
+% optParams = mean(real(x_keep_burnt(:, idxTop)), 2);
+
+[~, ind] = max(L_keep(burn:end));
 x_keep_burnt = x_keep(:, burn:end);
-optParams = mean(real(x_keep_burnt(:, idxTop)), 2);
+optParams = x_keep_burnt(:, ind);
 
 dprop = fun(optParams', varargin{:});
 

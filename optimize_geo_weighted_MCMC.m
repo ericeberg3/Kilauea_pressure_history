@@ -265,8 +265,8 @@ ntrials = 2e5; % Customize to get convergence
 % Testing GPS and prior weights.
 % gps_weights = linspace(4e1, 8e1, 10);
 % prior_weights = linspace(3e2, 1e3, 10);
-gps_weights = linspace(0.5e1, 1.5e2, 10);
-prior_weights = linspace(1e2, 1e4, 10);
+gps_weights = linspace(8e1, 6e2, 15);
+prior_weights = linspace(7e1, 1e5, 10);
 
 gps_weight = 6.7e1; % Optimal weight based on L curve
 prior_weight = 5.3e2; % Optimal weight based on L curve
@@ -277,9 +277,9 @@ delete(gcp('nocreate'));
 
 % --- Set if we want to run MCMC, plot the L curve, and the type of L curve
 % to create --- %
-runMCMC = false;
-run_L_curve = false;
-l_curve_type = "prior"; % 'prior' to test prior weights, 'gps' to test gps weights
+runMCMC = true;
+run_L_curve = true;
+l_curve_type = "gps"; % 'prior' to test prior weights, 'gps' to test gps weights
 % for l_curve_type = ["prior", "gps"]
 % For loop to create L curve
 n_l_curve = length(gps_weights);
@@ -293,22 +293,22 @@ else
     optParams_list = zeros(length(paramNames), length(gps_weights));
     l_curve_points = zeros(3,length(gps_weights));
 end
-
+% start_params = taiyi_parameters;
+% Move taiyi depth down a bit
+% start_params(7) = start_params(7) - 300;
 for i = 1:n_l_curve
-    prior_params = taiyi_parameters;
-    % Move taiyi depth down a bit
-    prior_params(7) = prior_params(7) - 300;
-
+    prior_params = start_params;
+    
     % Check if we are doing L curve analysis. If so set weight
     % appropriately
-    if(l_curve_type == "prior"); prior_weight = prior_weights(i);
-    else; prior_weight = 0; gps_weight = gps_weights(i); end
+    if(l_curve_type == "prior"); prior_weight = prior_weights(i); gps_weight = 6.7e1;
+    else; prior_weight = 2.1e2; gps_weight = gps_weights(i); end
     
     if(runMCMC)
         [optParams, posterior, L_keep, gps_l2, insar_l2, prior_l2] = optimize_SC_MCMC(prior_params, lb, ub, xopt, ...
             yopt, zopt, u1d', insarx, insary, insaru_full', look, insar_lengths, sparse(cinv_full), daily_inv_std, ...
             nanstatend, ntrials, gps_weight, prior_weight, paramNames, burn, saveFigs); % subsample set to true
-        optParams = real(optParams');
+        start_params = get_full_m(taiyi_parameters, real(optParams'), true, "insar");
 
         if(~run_L_curve)
             save Data/MCMC_1e6_SCvol_topbnd.mat optParams posterior L_keep gps_l2 insar_l2 prior_l2;
@@ -330,7 +330,7 @@ for i = 1:n_l_curve
 end
 % Save and plot l curve data
 if(run_L_curve)
-    save("Data/l_curve_data_" + l_curve_type + ".mat", "l_curve_points", "l_curve_type", "prior_weights", "gps_weights");
+    save("Data/l_curve_data_" + l_curve_type + "_prior_210.mat", "l_curve_points", "l_curve_type", "prior_weights", "gps_weights");
     % load Data/l_curve_data_prior.mat;
     posterior = squeeze(posteriors_list(:, :, end));
     optParams = optParams_list(:, end)';
@@ -715,7 +715,7 @@ else
     insaru_pred = insaru_pred' * look(:,1);
 end
 
-cLimits = [-1.55, 1.55];%0.55];
+cLimits = [-1.55, 0.55];
 opacity = 0.7;
 cmap = turbo;
 % Set if x and y axis labels are on

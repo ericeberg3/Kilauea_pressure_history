@@ -260,50 +260,67 @@ block_size = [blocks_asc, blocks_desc];
 %% MCMC Static inversion
 paramNames = {'dpHMM_insar', 'dpHMM_gps', 'volHMM', 'xHMM', 'yHMM', 'dHMM', 'alphaHMM' ...
     'xSC', 'ySC', 'dSC', 'alphaSC', 'dipSC', 'strikeSC', 'dpSC_insar', 'dpSC_gps', 'volSC'};
-ntrials = 1e4; % Customize to get convergence
+ntrials = 1e5; % Customize to get convergence
 
 % Testing GPS and prior weights.
 % gps_weights = linspace(4e1, 8e1, 10);
 % prior_weights = linspace(3e2, 1e3, 10);
-gps_weights = linspace(1e1, 1e2, 3);
-prior_weights = linspace(1e2, 1e4, 3);
+gps_weights = linspace(0.5e1, 1.5e2, 10);
+prior_weights = linspace(1e2, 1e4, 10);
 
 gps_weight = 6.7e1; % Optimal weight based on L curve
 prior_weight = 5.3e2; % Optimal weight based on L curve
+% burn = 0.5e3;
+burn = 4e3;
 
 delete(gcp('nocreate'));
 
-% Set up log likelihood lists for L curve creation. 
-gps_l2s = zeros(1,length(gps_weights));
-insar_l2s = zeros(1,length(gps_weights));
-posteriors_list = zeros(length(paramNames), ntrials - 4e3 + 1, length(gps_weights));
-optParams_list = zeros(length(paramNames), length(gps_weights));
-l_curve_points = zeros(3,length(gps_weights));
-
+% --- Set if we want to run MCMC, plot the L curve, and the type of L curve
+% to create --- %
 runMCMC = true;
-plotLcurve = true;
-l_curve_type = 'prior'; % 'prior' to test prior weights, 'gps' to test gps weights
-
+run_L_curve = true;
+l_curve_type = "gps"; % 'prior' to test prior weights, 'gps' to test gps weights
+% for l_curve_type = ["prior", "gps"]
 % For loop to create L curve
 n_l_curve = length(gps_weights);
-if(~plotLcurve); n_l_curve = 1; end
-
+if(~run_L_curve)
+    n_l_curve = 1; 
+else
+    % Set up log likelihood lists for L curve creation. 
+    gps_l2s = zeros(1,length(gps_weights));
+    insar_l2s = zeros(1,length(gps_weights));
+    posteriors_list = zeros(length(paramNames), ntrials - burn + 1, length(gps_weights));
+    optParams_list = zeros(length(paramNames), length(gps_weights));
+    l_curve_points = zeros(3,length(gps_weights));
+end
+start_params = taiyi_parameters;
+% Move taiyi depth down a bit
+start_params(7) = start_params(7) - 300;
 for i = 1:n_l_curve
-    prior_params = taiyi_parameters;
-    % Move taiyi depth down a bit
-    prior_params(7) = prior_params(7) - 300;
-
+    prior_params = start_params;
+    
     % Check if we are doing L curve analysis. If so set weight
     % appropriately
-    if(l_curve_type == 'prior'); gps_weight = gps_weights(i);
-    else; prior_weight = 
+    if(l_curve_type == "prior"); prior_weight = prior_weights(i); gps_weight = 6.7e1;
+    else; prior_weight = 2.1e2; gps_weight = gps_weights(i); end
     
     if(runMCMC)
         [optParams, posterior, L_keep, gps_l2, insar_l2, prior_l2] = optimize_SC_MCMC(prior_params, lb, ub, xopt, ...
             yopt, zopt, u1d', insarx, insary, insaru_full', look, insar_lengths, sparse(cinv_full), daily_inv_std, ...
-            nanstatend, ntrials, gps_weight, prior_weight, paramNames, subsample, saveFigs); % subsample set to true
+            nanstatend, ntrials, gps_weight, prior_weight, paramNames, burn, saveFigs); % subsample set to true
         optParams = real(optParams');
-        save Data/MCMC_1e6_SCvol_topbnd.mat optParams posterior L_keep gps_l2 insar_l2 prior_l2;
+        start_para
+
+        if(~run_L_curve)
+            save Data/MCMC_1e6_SCvol_topbnd.mat optParams posterior L_keep gps_l2 insar_l2 prior_l2;
+        else
+            l_curve_points(1,i) = gps_l2;
+            l_curve_points(2,i) = insar_l2;
+            l_curve_points(3,i) = prior_l2;
+    
+            posteriors_list(:, :, i) = posterior;
+            optParams_list(:, i) = optParams;
+        end
     else
         % load Data/MCMC_vars_1e6_allparams_nodpineq.mat;
         load Data/MCMC_1e6_SCvol_topbnd.mat;
@@ -311,80 +328,29 @@ for i = 1:n_l_curve
         optParams = posterior(:, ind)';
     end
     
-    % More L curve stuff
-    %     l_curve_points(1,i) = gps_l2;
-    %     l_curve_points(2,i) = insar_l2;
-    %     l_curve_points(3,i) = prior_l2;
-    % 
-    %     posteriors_list(:, :, i) = posterior;
-    %     optParams_list(:, i) = optParams;
-    % end
-    
-    
-    % Save / load L curve data
-    % save Data/l_curve_data_prior.mat l_curve_points;
+end
+% Save and plot l curve data
+if(run_L_curve)
+    save("Data/l_curve_data_" + l_curve_type + "_prior_210.mat", "l_curve_points", "l_curve_type", "prior_weights", "gps_weights");
     % load Data/l_curve_data_prior.mat;
-    % posterior = squeeze(posteriors_list(:, :, i));
-    % optParams = optParams_list(:, i)';
-    % disp(gps_weights(end));
+    posterior = squeeze(posteriors_list(:, :, end));
+    optParams = optParams_list(:, end)';
+    disp(gps_weights(end));
+    plotLcurve(l_curve_points, l_curve_type, prior_weights, gps_weights);
 end
 
+% end
 
 % Get the full geometry parameters based on the optimization results:
 disp("GPS L2: " + gps_l2 + " InSAR L2: " + insar_l2);
 optimizedM = get_full_m(taiyi_parameters, optParams, true, "insar");
 
-% end
 
 %%
 % Show parameter table
 disp(array2table(optParams(:).', 'VariableNames',paramNames));
 % Make sure parameters are real
 optParams = real(optParams);
-
-% % L curve plotting 
-% % Prepare L-curve data, GPS vs. insar
-% % xl = l_curve_points(1,:);
-% % yl = l_curve_points(2,:);
-% % xl = zeros(100, 1);
-% % yl = zeros(100, 1);
-% 
-% % L-curve data, GPS + insar vs. prior
-% xl = l_curve_points(1,:) + l_curve_points(2,:);
-% yl = abs(l_curve_points(3,:));
-% 
-% % Scatter, mapping color to gps_weights
-% l_curve = figure(7); clf;
-% scatter_handle = scatter(xl, yl, 400, prior_weights, 'filled');
-% 
-% % Choose colormap and add colorbar
-% colormap(parula);
-% c = colorbar;               
-% c.Label.String = 'Prior Weight';
-% c.FontSize = 24;
-% 
-% % (Optional) fix the color limits if you want to highwlight a subset:
-% % caxis([min(gps_weights), max(gps_weights)]);
-% 
-% % Labels & title
-% % xlabel("GPS L2");
-% % ylabel("InSAR L2");
-% xlabel("GPS L2 Norm + InSAR L2 Norm", 'FontSize', 24);
-% ylabel("Prior Log Likelihood", 'FontSize', 24);
-% title("L-curve colored by prior weight", 'FontSize', 30);
-% axis square;
-% ax = gca;
-% ax.FontSize = 24;
-% 
-% % Set up interactive data cursor
-% dcm = datacursormode(gcf);
-% set(dcm, 'UpdateFcn', @(~, event_obj) ...
-%     sprintf('GPS L2: %.2e\nInSAR L2: %.2e\nGPS Weight: %.1e', ...
-%             event_obj.Position(1), ...
-%             event_obj.Position(2), ...
-%             gps_weights(event_obj.DataIndex)));
-% 
-% exportgraphics(l_curve, './PaperFigs/l_curve_prior.png', 'Resolution', 500);
 
 
 %% Plot histogram of each parameter
@@ -758,6 +724,6 @@ xon = true; yon = false;
 % Set if colorbar is on
 con = true;
 
-plot_insar_new(insarx(ind), insary(ind), insaru_full(ind) - insaru_pred', block_size(ind), look, x, y, u1d, u1d, xon, yon, con, ...
+plot_insar_new(insarx(ind), insary(ind), insaru_full(ind), block_size(ind), look, x, y, u1d, u1d, xon, yon, con, ...
     31, GPSNameList, optimizedM, coast_new,cLimits, opacity, saveFigs, insarmode);
 %  - insaru_pred' insaru_full(ind)
