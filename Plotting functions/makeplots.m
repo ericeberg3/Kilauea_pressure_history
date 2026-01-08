@@ -2,7 +2,7 @@ function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilt
     usim, t, nanstat, nanstatbeginning, finalindex, collapset, ...
     dp, dp_low, dp_high, tau, tau_low, tau_high, optParams, optimizedM, GPSNameList, gTiltHMM, gTiltSC, xtilt, ytilt, tiltreduced, radscale, ...
     coast_new, taiyi_parameters, disptype, ntrials, offsets, saveFigs)
-
+    addpath('/Users/eric/Desktop/Summer 23 Lab/Matlab/ForEric')
     % u1d = squeeze(u(:, :, end-finalindex));
     % nanstat = isnan(u1d(:, 1));
     % u1d = u1d(~nanstat, :);
@@ -197,82 +197,8 @@ function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilt
         exportgraphics(fig,'./PaperFigs/pressure_histories_split.png','Resolution',600)
     end
 
-
-    %% Making grid of displacements and tilt
-    % for j = 1:1
-    %     disptype = j;
-    %     fig = figure(7);
-    %     % disptype = 2; % 1 = x, 2 = y, 3 = z
-    % 
-    %     tlo = tiledlayout(4,4);
-    %     if(disptype == 1)
-    %         title(tlo, "East Displacement vs. Time", 'FontSize', 24);
-    %     elseif(disptype == 2)
-    %         title(tlo, "North Displacement vs. Time", 'FontSize', 24);
-    %     else
-    %         title(tlo, "Vertical Displacement vs. Time", 'FontSize', 24);
-    %     end
-    % 
-    %     for i = 1:max(size(GPSNameList) + 1)
-    %         nexttile
-    %         if(i < length(GPSNameList) + 1)
-    %             if(disptype == 1)
-    %                 plot(t(1:end-finalindex), ux(i, 1:end-finalindex), '-', 'DisplayName', 'GPS', 'LineWidth', 1.2);
-    %                 hold on;
-    %                 plot(t(1:end-finalindex), usim(1:end-finalindex, 1, i), 'DisplayName', 'LSQ', 'LineWidth', 1.6);
-    %                 plot(t(end - finalindex), ux(i, end - finalindex), 'o-', 'MarkerFaceColor','red');
-    % 
-    %                 plot([0, 0], [0, offsets(i, j)], "LineWidth", 8);
-    %             elseif(disptype == 2)
-    %                 plot(t(1:end-finalindex), uy(i, 1:end-finalindex), '-', 'DisplayName', 'GPS', 'LineWidth', 1.2);
-    %                 hold on;
-    %                 plot(t(1:end-finalindex), usim(1:end-finalindex, 2, i), 'DisplayName', 'LSQ', 'LineWidth', 1.6);
-    %                 plot(t(end - finalindex), uy(i, end - finalindex), 'o-', 'MarkerFaceColor','red');
-    % 
-    %                 plot([0, 0], [0, offsets(i, j)], "LineWidth", 8);
-    %             else
-    %                 plot(t(1:end-finalindex), uz(i, 1:end-finalindex), '-', 'DisplayName', 'GPS', 'LineWidth', 1.2);
-    %                 hold on;
-    %                 plot(t(1:end-finalindex), squeeze(usim(1:end-finalindex, 3, i)), 'DisplayName', 'LSQ', 'LineWidth', 1.6);
-    %                 plot(t(end - finalindex), uz(i, end - finalindex), 'o-', 'MarkerFaceColor','red');
-    % 
-    %                 plot([0, 0], [0, offsets(i, j)], "LineWidth", 8);
-    %                 % xline(collapset);
-    %             end
-    %             if(GPSNameList(i) == "UWEV" || GPSNameList(i) == "BYRL" || GPSNameList(i) == "CRIM")
-    %                     set(gca,'Color','k');
-    %             end
-    %             ylabel("Displacement (m)");
-    %             title(GPSNameList(i))
-    %         else
-    %             simtiltx = (gTiltHMM(1) .* dp(:, 1)) + (gTiltSC(1) .* dp(:, 2));
-    %             plot(t(1:end-finalindex),tiltx(1:end-finalindex), '-', 'DisplayName', 'Data', 'LineWidth', 1.2);
-    %             hold on;
-    %             plot(t(1:end-finalindex), simtiltx(1:end-finalindex), '-', 'DisplayName', 'LSQ', 'LineWidth', 1.6);
-    %             title("Tilt e");
-    %             ylim([-30, 250]);
-    %             ylabel("Tilt (µrad)")
-    %             hold off;
-    %             nexttile;
-    %             simtilty = (gTiltHMM(2) .* dp(:, 1)) + (gTiltSC(2) .* dp(:, 2));
-    %             plot(t(1:end-finalindex), tilty(1:end-finalindex), '-', 'DisplayName', 'Data', 'LineWidth', 1.2);
-    %             hold on;
-    %             plot(t(1:end-finalindex), simtilty(1:end-finalindex), 'DisplayName', 'LSQ', 'LineWidth', 1.6);
-    %             ylim([-90, 130]);
-    %             ylabel("Tilt (µrad)")
-    %             title("Tilt n");
-    %         end
-    %         hold off;
-    %     end
-    %     leg = legend('Orientation', 'Horizontal');
-    %     leg.Layout.Tile = 'north';
-    %     leg.FontSize = 14;
-    %     if(saveFigs)
-    %         % saveas(7, "./Figures/displacements_" + disptype + "_" + num2str(ntrials, "%.1e") + "trials.fig"); 
-    %         exportgraphics(fig, "./PaperFigs/displacements_" + disptype + ".png", 'Resolution', 500);
-    %     end
-    % end
-
+%% Making grid of displacements + tilt
+plotDispGrid(t, finalindex, GPSNameList, u_low, u_high, ux, uy, uz, usim, tiltx, tilty) 
 
 % —— Toggle inclusion of the three inactive stations ——
 includeInactive = true;  % set to true to include UWEV, BYRL, CRIM

@@ -27,8 +27,8 @@ function data = create_MCMC_data(m, m_guess, x, y, z, insarx, insary, ...
     
     % Forward model computations
     % GPS data generation
-    [gHMM, ~, ~, ~] = spheroid(mHMM, [x(1:end); y(1:end); z(1:end)], 0.25, 3.08*10^9);
-    [gSC, ~, ~, ~] = spheroid(mSC, [x(1:end); y(1:end); z(1:end)], 0.25, 3.08*10^9);
+    [gHMM, ~, ~, ~] = spheroid(mHMM, [x(1:end); y(1:end); z(1:end)], 0.25, 3.08*10^9, 'volume');
+    [gSC, ~, ~, ~] = spheroid(mSC, [x(1:end); y(1:end); z(1:end)], 0.25, 3.08*10^9, 'volume');
     
     gtot = gHMM + gSC;
     GPS_data = gtot(:);
@@ -45,8 +45,8 @@ function data = create_MCMC_data(m, m_guess, x, y, z, insarx, insary, ...
         if i == 1; inds = 1:insar_lengths(i); end
         if i == 2; inds = (insar_lengths(i-1) + 1):sum(insar_lengths); end
 
-        [gHMM, ~, ~, ~] = spheroid(mHMM, [insarx(inds); insary(inds); zeros(size(insarx(inds)))], 0.25, 3.08*10^9);
-        [gSC, ~, ~, ~] = spheroid(mSC, [insarx(inds); insary(inds); zeros(size(insarx(inds)))], 0.25, 3.08*10^9);
+        [gHMM, ~, ~, ~] = spheroid(mHMM, [insarx(inds); insary(inds); zeros(size(insarx(inds)))], 0.25, 3.08*10^9, 'volume');
+        [gSC, ~, ~, ~] = spheroid(mSC, [insarx(inds); insary(inds); zeros(size(insarx(inds)))], 0.25, 3.08*10^9, 'volume');
     
         gtot = gHMM + gSC;
         insar_data(inds) = gtot' * look(:,i);

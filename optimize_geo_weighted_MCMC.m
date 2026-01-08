@@ -160,13 +160,13 @@ invStdPWRL = 1./std(squeeze(u(11, :, :)), 0, 2, "omitmissing");
 invStdPWRL = invStdPWRL(:);
 
 %% Optimizing geometry
-
+dvstep = 0.5;
 % Setting up parameters from Wang et al. 2021 for reference
-% taiyi_parameters = [1600.79, 914.47, 90, 0, 0.46e3 + npitloc(1), 0.35e3 + npitloc(2), -2.18e3, -4e7, ... 
-%     277.01, 1621.47, 63, 136, npitloc(1) + 1890, npitloc(2) - 3030, -3630, -10e6];
 % Use taiyi + kyle for HMM 
-taiyi_parameters = [1600.79, 914.47, 90, 0, 50, 200, -2.18e3, -4e7, ... 
-     277.01, 1621.47, 63, 136, npitloc(1) + 1890, npitloc(2) - 3030, -3630, -10e6];
+% taiyi_parameters = [1600.79, 914.47, 90, 0, 50, 200, -2.18e3, -4e7, ... 
+%      277.01, 1621.47, 63, 136, npitloc(1) + 1890, npitloc(2) - 3030, -3630, -10e6];
+taiyi_parameters = [1600.79, 914.47, 90, 0, 50, 200, -2.18e3, 0.5e8*dvstep, ... 
+     277.01, 1621.47, 63, 136, npitloc(1) + 1890, npitloc(2) - 3030, -3630, 0.5e8*dvstep];
 
 % Setting up parameters from Roman et al. 2021 for reference
 aspect_ratio_HMM = 1;
@@ -189,10 +189,16 @@ roman_parameters = [vert_sd_HMM, vert_sd_HMM/(aspect_ratio_HMM), 90, 0, 0, 0, -9
 %      1.8e3, -2.0e3, -2.9e3, 1, 90, 180, 1e6, 1e6, 20e9]; 
 
 % Inferred from kyle / taiyi (see spreadsheet):
-lb = [-5e7, -5e7, 1e8, -100, 0, -16e2, 0.8, ...
-    -2.7e3, -2.8e3, -4.7e3, 0.1, 45, 0, -5e7, -5e7, 2.0e9]; 
-ub = [1e6, 1e6, 3e10, 227, 1050, -7.5e2, 1.8, ...
-     2.2e3, -0.45e3, -2.7e3, 1, 90, 180, 1e6, 1e6, 20e9]; 
+% lb = [-5e7, -5e7, 1e8, -100, 0, -16e2, 0.8, ...
+%     -2.7e3, -2.8e3, -4.7e3, 0.1, 45, 0, -5e7, -5e7, 2.0e9]; 
+% ub = [1e6, 1e6, 3e10, 227, 1050, -7.5e2, 1.8, ...
+%      2.2e3, -0.45e3, -2.7e3, 1, 90, 180, 1e6, 1e6, 20e9]; 
+
+
+lb = [-1e9*dvstep, -1e9*dvstep, -100, 0, -16e2, 0.8, ...
+    -2.7e3, -2.8e3, -4.7e3, 0.1, 45, 0, -1e9*dvstep, -1e9*dvstep]; 
+ub = [1e9*dvstep, 1e9*dvstep, 227, 1050, -7.5e2, 1.8, ...
+     2.2e3, -0.45e3, -2.7e3, 1, 90, 180, 1e9*dvstep, 1e9*dvstep]; 
 
 % Save figures for export
 saveFigs = true;
@@ -257,9 +263,11 @@ insarx = [insarx_asc, insarx_desc];
 insary = [insary_asc, insary_desc];
 block_size = [blocks_asc, blocks_desc];
 
-%% MCMC Static inversion
-paramNames = {'dpHMM_insar', 'dpHMM_gps', 'volHMM', 'xHMM', 'yHMM', 'dHMM', 'alphaHMM' ...
-    'xSC', 'ySC', 'dSC', 'alphaSC', 'dipSC', 'strikeSC', 'dpSC_insar', 'dpSC_gps', 'volSC'};
+%% MCMC Static inversion #1 - Volume change
+% paramNames = {'dpHMM_insar', 'dpHMM_gps', 'volHMM', 'xHMM', 'yHMM', 'dHMM', 'alphaHMM' ...
+%     'xSC', 'ySC', 'dSC', 'alphaSC', 'dipSC', 'strikeSC', 'dpSC_insar', 'dpSC_gps', 'volSC'};
+paramNames = {'dvHMM_insar', 'dvHMM_gps', 'xHMM', 'yHMM', 'dHMM', 'alphaHMM' ...
+    'xSC', 'ySC', 'dSC', 'alphaSC', 'dipSC', 'strikeSC', 'dvSC_insar', 'dvSC_gps'};
 ntrials = 2e5; % Customize to get convergence
 
 % Testing GPS and prior weights.
@@ -278,7 +286,7 @@ delete(gcp('nocreate'));
 % --- Set if we want to run MCMC, plot the L curve, and the type of L curve
 % to create --- %
 runMCMC = true;
-run_L_curve = true;
+run_L_curve = false;
 l_curve_type = "gps"; % 'prior' to test prior weights, 'gps' to test gps weights
 % for l_curve_type = ["prior", "gps"]
 % For loop to create L curve
@@ -293,9 +301,9 @@ else
     optParams_list = zeros(length(paramNames), length(gps_weights));
     l_curve_points = zeros(3,length(gps_weights));
 end
-% start_params = taiyi_parameters;
+start_params = taiyi_parameters;
 % Move taiyi depth down a bit
-% start_params(7) = start_params(7) - 300;
+start_params(7) = start_params(7) - 300;
 for i = 1:n_l_curve
     prior_params = start_params;
     
@@ -311,7 +319,8 @@ for i = 1:n_l_curve
         start_params = get_full_m(taiyi_parameters, real(optParams'), true, "insar");
 
         if(~run_L_curve)
-            save Data/MCMC_1e6_SCvol_topbnd.mat optParams posterior L_keep gps_l2 insar_l2 prior_l2;
+            % save Data/MCMC_1e6_SCvol_topbnd.mat optParams posterior L_keep gps_l2 insar_l2 prior_l2;
+            save Data/MCMC_1e6_dVinversion.mat optParams posterior L_keep gps_l2 insar_l2 prior_l2;
         else
             l_curve_points(1,i) = gps_l2;
             l_curve_points(2,i) = insar_l2;
@@ -321,7 +330,6 @@ for i = 1:n_l_curve
             optParams_list(:, i) = optParams;
         end
     else
-        % load Data/MCMC_vars_1e6_allparams_nodpineq.mat;
         load Data/MCMC_1e6_SCvol_topbnd.mat;
         [~, ind] = max(L_keep);
         optParams = posterior(:, ind)';
@@ -342,7 +350,7 @@ end
 
 % Get the full geometry parameters based on the optimization results:
 disp("GPS L2: " + gps_l2 + " InSAR L2: " + insar_l2);
-optimizedM = get_full_m(taiyi_parameters, optParams, true, "insar");
+optimizedM = get_full_m(taiyi_parameters, optParams', true, "insar");
 
 
 %%
@@ -351,12 +359,32 @@ disp(array2table(optParams(:).', 'VariableNames',paramNames));
 % Make sure parameters are real
 optParams = real(optParams);
 
+%% MCMC inversion #2: Volume + pressure change inversion
+% Volume change
+
 
 %% Plot histogram of each parameter
+% plotParamNames = {
+%   '$\Delta p_{\mathrm{HMM}}^{\mathrm{InSAR}}\ (\mathrm{MPa})$', ...
+%   '$\Delta p_{\mathrm{HMM}}^{\mathrm{GPS}}\ (\mathrm{MPa})$', ...
+%   '$V_{\mathrm{HMM}}\ (\mathrm{km}^3)$', ...
+%   '$x_{\mathrm{HMM}}\ (\mathrm{km})$', ...
+%   '$y_{\mathrm{HMM}}\ (\mathrm{km})$', ...
+%   '$d_{\mathrm{HMM}}\ (\mathrm{km})$', ...
+%   '$\alpha_{\mathrm{HMM}}$', ...
+%   '$x_{\mathrm{SC}}\ (\mathrm{km})$', ...
+%   '$y_{\mathrm{SC}}\ (\mathrm{km})$', ...
+%   '$d_{\mathrm{SC}}\ (\mathrm{km})$', ...
+%   '$\alpha_{\mathrm{SC}}$', ...
+%   '$\phi_{\mathrm{SC}}\ (^\circ)$', ...
+%   '$\psi_{\mathrm{SC}}\ (^\circ)$', ...
+%   '$\Delta p_{\mathrm{SC}}^{\mathrm{InSAR}}\ (\mathrm{MPa})$', ...
+%   '$\Delta p_{\mathrm{SC}}^{\mathrm{GPS}}\ (\mathrm{MPa})$', ...
+%   '$V_{\mathrm{SC}}\ (\mathrm{km}^3)$',
+% };
 plotParamNames = {
-  '$\Delta p_{\mathrm{HMM}}^{\mathrm{InSAR}}\ (\mathrm{MPa})$', ...
-  '$\Delta p_{\mathrm{HMM}}^{\mathrm{GPS}}\ (\mathrm{MPa})$', ...
-  '$V_{\mathrm{HMM}}\ (\mathrm{km}^3)$', ...
+  '$\Delta V_{\mathrm{HMM}}^{\mathrm{InSAR}}\ (\mathrm{MPa})$', ...
+  '$\Delta V_{\mathrm{HMM}}^{\mathrm{GPS}}\ (\mathrm{MPa})$', ...
   '$x_{\mathrm{HMM}}\ (\mathrm{km})$', ...
   '$y_{\mathrm{HMM}}\ (\mathrm{km})$', ...
   '$d_{\mathrm{HMM}}\ (\mathrm{km})$', ...
@@ -367,17 +395,19 @@ plotParamNames = {
   '$\alpha_{\mathrm{SC}}$', ...
   '$\phi_{\mathrm{SC}}\ (^\circ)$', ...
   '$\psi_{\mathrm{SC}}\ (^\circ)$', ...
-  '$\Delta p_{\mathrm{SC}}^{\mathrm{InSAR}}\ (\mathrm{MPa})$', ...
-  '$\Delta p_{\mathrm{SC}}^{\mathrm{GPS}}\ (\mathrm{MPa})$', ...
-  '$V_{\mathrm{SC}}\ (\mathrm{km}^3)$',
+  '$\Delta V_{\mathrm{SC}}^{\mathrm{InSAR}}\ (\mathrm{MPa})$', ...
+  '$\Delta V_{\mathrm{SC}}^{\mathrm{GPS}}\ (\mathrm{MPa})$', ...
 };
 
 % Scale units to appropriate factor
-unitScaling = [1e-6, 1e-6, 1e-9, 1e-3, 1e-3, 1e-3, 1, ...
-    1e-3, 1e-3, 1e-3, 1, 1, 1, 1e-6, 1e-6, 1e-9];
+% unitScaling = [1e-6, 1e-6, 1e-9, 1e-3, 1e-3, 1e-3, 1, ...
+%     1e-3, 1e-3, 1e-3, 1, 1, 1, 1e-6, 1e-6, 1e-9];
+unitScaling = [1e-9, 1e-9, 1e-3, 1e-3, 1e-3, 1, ...
+    1e-3, 1e-3, 1e-3, 1, 1, 1, 1e-9, 1e-9];
 
-histlims = [-50, 0; -40, 0; 0, 20; -0.1, 0.2; 0, 0.4; -1.5, -0.75; 1.3, 1.8; ...
-    0, 2; -2.8, -2.0; -4.5, -3; 0.1, 0.6; 50, 80; 100, 180; -40, 0; -40, 0; 2, 15];
+% histlims = [-50, 0; -40, 0; 0, 20; -0.1, 0.2; 0, 0.4; -1.5, -0.75; 1.3, 1.8; ...
+%     0, 2; -2.8, -2.0; -4.5, -3; 0.1, 0.6; 50, 80; 100, 180; -40, 0; -40, 0; 2, 15];
+histlims = [unitScaling' .* lb', unitScaling' .* ub'];
 
 figure(5);
 clf;
@@ -615,7 +645,7 @@ dp(:, 1) = fillmissing(dp(:, 1), "makima", 1);
 
 %% Error analysis
 
-N_draws = 200;
+N_draws = 10;
 N_noise = 5;
 
 disp("Getting errors...")
