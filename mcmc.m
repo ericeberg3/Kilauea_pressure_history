@@ -22,9 +22,6 @@ function  [x_keep, L_keep, count, gps_l2, insar_l2, prior_l2] = mcmc(func,data,x
 %       count  = number of accepted. Acceptance ratio is count/Niter
 %
 %  P Segall: 2012
-% TODO? Should I add something to seed rand? Better if this is done in
-% calling program
-% rng('shuffle');
 
 fun = fcnchk(func);
 load Data/paramDists.mat paramDists;

@@ -1,6 +1,6 @@
 %% Creates tilt greens functions
 
-function [gTiltHMM, gTiltSC] = createtiltgreens(mHMM, mSC, dtheta, keep, mu)
+function [gTiltHMM, gTiltSC] = createtiltgreens(mHMM, mSC, dtheta, keep, mu, flag)
     xyll = [-155.2937; 19.3905];
     xy = llh2local(xyll, [-155.2784, 19.4073]) * 1000;
     x = xy(1);
@@ -10,13 +10,16 @@ function [gTiltHMM, gTiltSC] = createtiltgreens(mHMM, mSC, dtheta, keep, mu)
     if nargin < 5
         mu = 3.08*10^9;
     end
+    if nargin < 6
+        flag = 'pressure';
+    end
     % Sign convention negative dp is positive pressure increase
     
     npitloc = coord('NPIT', 'llh');
     npitloc = llh2local(npitloc(1:2), [-155.2784, 19.4073]) * 1000;
     
-    [~, dHMM, ~, ~] = spheroid(mHMM, [x; y; z], 0.25, 3.08*10^9);
-    [~, dSC, ~, ~] = spheroid(mSC, [x; y; z], 0.25, 3.08*10^9);
+    [~, dHMM, ~, ~] = spheroid(mHMM, [x; y; z], 0.25, 3.08*10^9, flag);
+    [~, dSC, ~, ~] = spheroid(mSC, [x; y; z], 0.25, 3.08*10^9, flag);
     dHMM = real(dHMM);
     dSC = real(dSC);
     

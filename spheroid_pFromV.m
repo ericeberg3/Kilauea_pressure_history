@@ -1,4 +1,4 @@
-function out = spheroid_pFromV (m,nu,mu, type);
+function out = spheroid_pFromV (m,nu,mu, type)
 
 % compute the equivalent pressure for given DeltaV: all equations follow
 % from spheroid.m. OR vice versa;  if type is pressure then compute dV if

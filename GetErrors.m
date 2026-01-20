@@ -1,6 +1,7 @@
-function [dp_low, dp_high, u_high, u_low] = GetErrors(N_draws, N_noise, posterior, paramDists, ntime, ...
-    ux, uy, uz, tiltx, tilty, ...
-    dispstd, GPSNameList, rw_stddev, dp_weight, taiyi_parameters, npitloc, gps_sigma, nanstatbeginning, paramNames, optParams)
+function [dp_low, dp_high, u_high, u_low] = GetErrors(N_draws, N_noise, posterior, posterior2, posterior3, ...
+    paramDists, ntime, ux, uy, uz, tiltx, tilty, ...
+    dispstd, GPSNameList, rw_stddev, dp_weight, taiyi_parameters, ...
+    npitloc, gps_sigma, nanstatbeginning, paramNames, paramNames2, paramNames3, optimizedM)
 %% First construct the covariance matrices to generate added nosie
 %%% Delete dp, optimizedM when it works
 N = length(tiltx);          % number of measurements
@@ -16,41 +17,52 @@ gps_sigma = 1./gps_sigma;
 dtheta = 0;
 full_param_names = {'dpHMM_insar', 'dpHMM_gps','volHMM', 'alphaHMM', 'xHMM', 'yHMM', 'dHMM', ...
     'alphaSC', 'dipSC', 'strikeSC', 'xSC', 'ySC', 'dSC', 'dpSC_insar', 'dpSC_gps', 'volSC', 'mu'}; 
-full_posterior = zeros(length(full_param_names), size(posterior,2));
+full_posterior = zeros(length(full_param_names), N_draws);
 
 % Excluding dip HMM, strike HMM, SC volume % ADD MU
 
 % populate the posterior distribution with each relevant metric
 for i = 1:size(full_posterior, 1)
-    idx = find(strcmp(full_param_names{i}, paramNames));
-    if ~isempty(idx)
-        full_posterior(i, :) = posterior(idx, :);
+    idx1 = find(strcmp(full_param_names{i}, paramNames));
+    idx2 = find(strcmp(full_param_names{i}, paramNames2));
+    idx3 = find(strcmp(full_param_names{i}, paramNames3));
+    if ~isempty(idx3)
+        temp_post = posterior3(idx3, :);
+        temp_post = temp_post(~isnan(temp_post));
+        rand_cols = randi(size(temp_post, 2), 1, N_draws);
+        full_posterior(i, :) = temp_post(rand_cols);
+    elseif ~isempty(idx2)
+        rand_cols = randi(size(posterior2, 2), 1, N_draws);
+        full_posterior(i, :) = posterior2(idx2, rand_cols);
+    elseif ~isempty(idx1)
+        rand_cols = randi(size(posterior, 2), 1, N_draws);
+        full_posterior(i, :) = posterior(idx1, rand_cols);
     else
         % xlims = paramDists.(full_param_names{i}).xlim;
         % xsamples = linspace(xlims(1), xlims(2), length(posterior));
         % pdf_vals = pdf(paramDists.(full_param_names{i}).dist, xsamples);
         full_posterior(i,:) = random(paramDists.(full_param_names{i}).dist, ...
-                             1, size(posterior,2));
+                             1, N_draws);
     end
     
 end
 % Now convert full_posterior to a posterior with all the params for
 % spheroid.m
-complete_posterior = zeros(16, size(posterior,2));
+complete_posterior = zeros(16, N_draws);
 % Vert and horiz semi diam
 HMM_vol = full_posterior(3,:);
 alpha_HMM = full_posterior(4,:);
 opt_vert_sd = (3/(4*pi) .* HMM_vol .* (alpha_HMM.^2)).^(1/3);
 opt_horiz_sd = opt_vert_sd./(alpha_HMM);
-optimizedM = get_full_m(taiyi_parameters, optParams, true, "insar");
+
 
 % Check one parameterameter sampling correctly
 % complete_posterior(1:8,:) = optimizedM(1:8)' * ones(1, length(posterior));
 
 complete_posterior(1,:) = opt_vert_sd;
 complete_posterior(2,:) = opt_horiz_sd;
-complete_posterior(3,:) = 90 .* ones(1, length(posterior));
-complete_posterior(4,:) = zeros(1, length(posterior));
+complete_posterior(3,:) = 90 .* ones(1, N_draws);
+complete_posterior(4,:) = zeros(1, N_draws);
 complete_posterior(5,:) = full_posterior(5,:);
 complete_posterior(6,:) = full_posterior(6,:);
 
@@ -94,10 +106,10 @@ while i < N_draws + 1
     randIdx = randi(size(complete_posterior, 2), [1, 1]);
     % Check that depth is a reasonable value
     % if(complete_posterior(7, randIdx) + abs(complete_posterior(1, randIdx)) < taiyi_parameters(7) + abs(taiyi_parameters(1)))
-    geo_samples(:,i) = complete_posterior(:, randIdx);
+    geo_samples(:,i) = complete_posterior(:, i);
     % Add offset to top of HMM to bring center back to center of volume
     geo_samples(7,i) = geo_samples(7,i) - geo_samples(1,i);
-    mu_samples(i) = mu_dist(randIdx);
+    mu_samples(i) = full_posterior(end,i);
     i = i + 1;
     % end
 end
@@ -116,13 +128,13 @@ if isempty(gcp('nocreate'))
     parpool('local');  % or a specific number of workers: parpool('local',4)
 end
 
-parfor i = 1:N_draws
+for i = 1:N_draws
     % Format new geometry into optimizedM array
     m_samp = geo_samples(:,i); % get_full_m(taiyi_parameters, geo_samples(:,i), true);
     mu_samp = 3.08e9; %10^mu_samples(i);
     % Create new green's functions
-    [gHMM_samp, gSC_samp] = creategreens(m_samp(1:8), m_samp(9:end), mu_samp);
-    [gTiltHMM_samp, gTiltSC_samp] = createtiltgreens(m_samp(1:8), m_samp(9:end), dtheta, false, mu_samp);
+    [gHMM_samp, gSC_samp] = creategreens(m_samp(1:8), m_samp(9:end), mu_samp, 'pressure');
+    [gTiltHMM_samp, gTiltSC_samp] = createtiltgreens(m_samp(1:8), m_samp(9:end), dtheta, false, mu_samp, 'pressure');
     gHMMflat_samp = gHMM_samp';
     gHMMflat_samp = real(gHMMflat_samp(:));
     gSCflat_samp = gSC_samp';

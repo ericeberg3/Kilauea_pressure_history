@@ -160,13 +160,12 @@ invStdPWRL = 1./std(squeeze(u(11, :, :)), 0, 2, "omitmissing");
 invStdPWRL = invStdPWRL(:);
 
 %% Optimizing geometry
-dvstep = 0.5;
 % Setting up parameters from Wang et al. 2021 for reference
 % Use taiyi + kyle for HMM 
 % taiyi_parameters = [1600.79, 914.47, 90, 0, 50, 200, -2.18e3, -4e7, ... 
 %      277.01, 1621.47, 63, 136, npitloc(1) + 1890, npitloc(2) - 3030, -3630, -10e6];
-taiyi_parameters = [1600.79, 914.47, 90, 0, 50, 200, -2.18e3, 0.5e8*dvstep, ... 
-     277.01, 1621.47, 63, 136, npitloc(1) + 1890, npitloc(2) - 3030, -3630, 0.5e8*dvstep];
+taiyi_parameters = [1600.79, 914.47, 90, 0, 50, 200, -2.18e3, -4.5e6, ... 
+     277.01, 1621.47, 63, 136, npitloc(1) + 1890, npitloc(2) - 3030, -3630, -1.5e7];
 
 % Setting up parameters from Roman et al. 2021 for reference
 aspect_ratio_HMM = 1;
@@ -195,10 +194,10 @@ roman_parameters = [vert_sd_HMM, vert_sd_HMM/(aspect_ratio_HMM), 90, 0, 0, 0, -9
 %      2.2e3, -0.45e3, -2.7e3, 1, 90, 180, 1e6, 1e6, 20e9]; 
 
 
-lb = [-1e9*dvstep, -1e9*dvstep, -100, 0, -16e2, 0.8, ...
-    -2.7e3, -2.8e3, -4.7e3, 0.1, 45, 0, -1e9*dvstep, -1e9*dvstep]; 
-ub = [1e9*dvstep, 1e9*dvstep, 227, 1050, -7.5e2, 1.8, ...
-     2.2e3, -0.45e3, -2.7e3, 1, 90, 180, 1e9*dvstep, 1e9*dvstep]; 
+lb = [-1e8, -1e8, -100, 0, -16e2, 0.8, ...
+    -2.7e3, -2.8e3, -4.7e3, 0.1, 45, 0, -1e8, -1e8]; 
+ub = [1e8, 1e8, 227, 1050, -7.5e2, 1.8, ...
+     2.2e3, -0.45e3, -2.7e3, 1, 90, 180, 1e8, 1e8]; 
 
 % Save figures for export
 saveFigs = true;
@@ -268,7 +267,7 @@ block_size = [blocks_asc, blocks_desc];
 %     'xSC', 'ySC', 'dSC', 'alphaSC', 'dipSC', 'strikeSC', 'dpSC_insar', 'dpSC_gps', 'volSC'};
 paramNames = {'dvHMM_insar', 'dvHMM_gps', 'xHMM', 'yHMM', 'dHMM', 'alphaHMM' ...
     'xSC', 'ySC', 'dSC', 'alphaSC', 'dipSC', 'strikeSC', 'dvSC_insar', 'dvSC_gps'};
-ntrials = 2e5; % Customize to get convergence
+ntrials = 1e5; % Customize to get convergence
 
 % Testing GPS and prior weights.
 % gps_weights = linspace(4e1, 8e1, 10);
@@ -277,7 +276,7 @@ gps_weights = linspace(8e1, 6e2, 15);
 prior_weights = linspace(7e1, 1e5, 10);
 
 gps_weight = 6.7e1; % Optimal weight based on L curve
-prior_weight = 5.3e2; % Optimal weight based on L curve
+prior_weight = 0;%5.3e2; % Optimal weight based on L curve
 % burn = 0.5e3;
 burn = 4e3;
 
@@ -285,7 +284,7 @@ delete(gcp('nocreate'));
 
 % --- Set if we want to run MCMC, plot the L curve, and the type of L curve
 % to create --- %
-runMCMC = true;
+runMCMC = false;
 run_L_curve = false;
 l_curve_type = "gps"; % 'prior' to test prior weights, 'gps' to test gps weights
 % for l_curve_type = ["prior", "gps"]
@@ -309,18 +308,20 @@ for i = 1:n_l_curve
     
     % Check if we are doing L curve analysis. If so set weight
     % appropriately
-    if(l_curve_type == "prior"); prior_weight = prior_weights(i); gps_weight = 6.7e1;
-    else; prior_weight = 2.1e2; gps_weight = gps_weights(i); end
-    
+    if(run_L_curve)
+        if(l_curve_type == "prior"); prior_weight = prior_weights(i); gps_weight = 6.7e1;
+        else; prior_weight = 2.1e2; gps_weight = gps_weights(i); end
+    end
+        
     if(runMCMC)
         [optParams, posterior, L_keep, gps_l2, insar_l2, prior_l2] = optimize_SC_MCMC(prior_params, lb, ub, xopt, ...
             yopt, zopt, u1d', insarx, insary, insaru_full', look, insar_lengths, sparse(cinv_full), daily_inv_std, ...
-            nanstatend, ntrials, gps_weight, prior_weight, paramNames, burn, saveFigs); % subsample set to true
+            nanstatend, ntrials, gps_weight, prior_weight, paramNames, burn, false, saveFigs); % subsample set to true
         start_params = get_full_m(taiyi_parameters, real(optParams'), true, "insar");
 
         if(~run_L_curve)
             % save Data/MCMC_1e6_SCvol_topbnd.mat optParams posterior L_keep gps_l2 insar_l2 prior_l2;
-            save Data/MCMC_1e6_dVinversion.mat optParams posterior L_keep gps_l2 insar_l2 prior_l2;
+            save Data/MCMC_1e6_dVinversion_noprior.mat optParams posterior L_keep gps_l2 insar_l2 prior_l2;
         else
             l_curve_points(1,i) = gps_l2;
             l_curve_points(2,i) = insar_l2;
@@ -330,7 +331,8 @@ for i = 1:n_l_curve
             optParams_list(:, i) = optParams;
         end
     else
-        load Data/MCMC_1e6_SCvol_topbnd.mat;
+        % load Data/MCMC_1e6_SCvol_topbnd.mat;
+        load Data/MCMC_1e6_dVinversion.mat;
         [~, ind] = max(L_keep);
         optParams = posterior(:, ind)';
     end
@@ -350,7 +352,7 @@ end
 
 % Get the full geometry parameters based on the optimization results:
 disp("GPS L2: " + gps_l2 + " InSAR L2: " + insar_l2);
-optimizedM = get_full_m(taiyi_parameters, optParams', true, "insar");
+optimizedM = get_full_m(taiyi_parameters, optParams, true, "insar");
 
 
 %%
@@ -360,242 +362,309 @@ disp(array2table(optParams(:).', 'VariableNames',paramNames));
 optParams = real(optParams);
 
 %% MCMC inversion #2: Volume + pressure change inversion
-% Volume change
+paramNames2 = {'volHMM', 'volSC', 'dvHMM_insar', 'dvHMM_gps', 'dvSC_insar', 'dvSC_gps'};
+
+% Update priors from run 1 posterior:
+load Data/paramDists.mat paramDists;
+vars_to_transfer = {'dvHMM_insar', 'dvHMM_gps', 'dvSC_insar', 'dvSC_gps'};
+
+figure(1); clf;
+for i = 1:length(vars_to_transfer)
+    pName = vars_to_transfer{i};
+
+    % Find the index of this parameter in the Run 1 paramNames list
+    % (We assume paramNames from Run 1 exists in workspace)
+    idx = find(strcmp(paramNames, pName));
+    if isempty(idx)
+        warning('Parameter %s not found in Run 1 results.', pName);
+        continue;
+    end
+
+    % Extract the samples
+    samples = posterior(idx, :);
+    
+    % 3. Fit a Kernel Distribution (Smooths the histogram into a pdf)
+    % This creates a probability object that supports the .pdf() method
+    pd = fitdist(samples', 'Normal'); 
+    subplot(2,2,i);
+    histogram(samples, 50, 'Normalization','pdf');
+    hold on;
+    x_grid = linspace(min(samples), max(samples), 100); % 100 points for smoothness
+    y_vals = pdf(pd, x_grid);
+    plot(x_grid, y_vals, 'LineWidth', 2, 'Color', 'r');
+
+    % 4. Update the paramDists structure
+    paramDists.(pName).dist = pd;
+    paramDists.(pName).samples = samples; 
+    paramDists.(pName).family = 'prob.KernelDistribution';
+    
+    % Optional: Print check
+    fprintf('  -> %s updated (Mean: %.2e)\n', pName, mean(samples));
+end
 
 
-%% Plot histogram of each parameter
-% plotParamNames = {
-%   '$\Delta p_{\mathrm{HMM}}^{\mathrm{InSAR}}\ (\mathrm{MPa})$', ...
-%   '$\Delta p_{\mathrm{HMM}}^{\mathrm{GPS}}\ (\mathrm{MPa})$', ...
-%   '$V_{\mathrm{HMM}}\ (\mathrm{km}^3)$', ...
-%   '$x_{\mathrm{HMM}}\ (\mathrm{km})$', ...
-%   '$y_{\mathrm{HMM}}\ (\mathrm{km})$', ...
-%   '$d_{\mathrm{HMM}}\ (\mathrm{km})$', ...
-%   '$\alpha_{\mathrm{HMM}}$', ...
-%   '$x_{\mathrm{SC}}\ (\mathrm{km})$', ...
-%   '$y_{\mathrm{SC}}\ (\mathrm{km})$', ...
-%   '$d_{\mathrm{SC}}\ (\mathrm{km})$', ...
-%   '$\alpha_{\mathrm{SC}}$', ...
-%   '$\phi_{\mathrm{SC}}\ (^\circ)$', ...
-%   '$\psi_{\mathrm{SC}}\ (^\circ)$', ...
-%   '$\Delta p_{\mathrm{SC}}^{\mathrm{InSAR}}\ (\mathrm{MPa})$', ...
-%   '$\Delta p_{\mathrm{SC}}^{\mathrm{GPS}}\ (\mathrm{MPa})$', ...
-%   '$V_{\mathrm{SC}}\ (\mathrm{km}^3)$',
-% };
-plotParamNames = {
-  '$\Delta V_{\mathrm{HMM}}^{\mathrm{InSAR}}\ (\mathrm{MPa})$', ...
-  '$\Delta V_{\mathrm{HMM}}^{\mathrm{GPS}}\ (\mathrm{MPa})$', ...
-  '$x_{\mathrm{HMM}}\ (\mathrm{km})$', ...
-  '$y_{\mathrm{HMM}}\ (\mathrm{km})$', ...
-  '$d_{\mathrm{HMM}}\ (\mathrm{km})$', ...
-  '$\alpha_{\mathrm{HMM}}$', ...
-  '$x_{\mathrm{SC}}\ (\mathrm{km})$', ...
-  '$y_{\mathrm{SC}}\ (\mathrm{km})$', ...
-  '$d_{\mathrm{SC}}\ (\mathrm{km})$', ...
-  '$\alpha_{\mathrm{SC}}$', ...
-  '$\phi_{\mathrm{SC}}\ (^\circ)$', ...
-  '$\psi_{\mathrm{SC}}\ (^\circ)$', ...
-  '$\Delta V_{\mathrm{SC}}^{\mathrm{InSAR}}\ (\mathrm{MPa})$', ...
-  '$\Delta V_{\mathrm{SC}}^{\mathrm{GPS}}\ (\mathrm{MPa})$', ...
+save Data/paramDists.mat paramDists;
+%%
+% Run second MCMC
+lb2 = [1e8, 2e9, -1e8, -1e8, -1e8, -1e8];
+ub2 = [3e10, 2e10, 0, 0, 0, 0];
+ntrials2 = 1e6;
+runMCMC = false;
+% x_guess = [4e9, 3e9, optParams(1), optParams(2), optParams(13), optParams(14)];
+if(runMCMC)
+    [optParams2, posterior2, L_keep2, ~, ~, ~] = optimize_SC_MCMC(optimizedM, lb2, ub2, xopt, ...
+                yopt, zopt, u1d', insarx, insary, insaru_full', look, insar_lengths, sparse(cinv_full), daily_inv_std, ...
+                nanstatend, ntrials2, gps_weight, 5.3e2, paramNames2, burn, true, saveFigs); % subsample set to true
+    save Data/MCMC2_1e6_vol_inversion.mat optParams2 posterior2 L_keep2;
+else
+    load Data/MCMC2_1e6_vol_inversion.mat
+end
+% Adjust optimizedM to reflect the new calc volume + volume change
+HMM_AR = optimizedM(1)/optimizedM(2);
+HMM_volume = optParams2(1);
+vert_sd = (3/(4*pi) * HMM_volume * (HMM_AR^2))^(1/3);
+horiz_sd = vert_sd/(HMM_AR);
+optimizedM(1:2) = [vert_sd, horiz_sd];
+
+SC_AR = optimizedM(9)/optimizedM(10);
+SC_volume = optParams2(2);
+vert_sd = (3/(4*pi) * SC_volume * (SC_AR^2))^(1/3);
+horiz_sd = vert_sd/(SC_AR);
+optimizedM(9:10) = [vert_sd, horiz_sd];
+
+optimizedM(8) = optParams2(3); optimizedM(16) = optParams2(5);
+
+%% New histogram plotting
+paramNames3 = {'dpHMM_insar', 'dpHMM_gps', 'dpSC_insar', 'dpSC_gps'};
+lb3 = [-5e7, -5e7, -5e7, -5e7];
+ub3 = [0, 0, 0, 0];
+% 1. Pre-allocate pressure arrays (N_samples x 4: HMM_insar, HMM_gps, SC_insar, SC_gps)
+% We assume pFromV returns [dpHMM_insar, dpHMM_gps, dpSC_insar, dpSC_gps]
+% Adjust the indices based on your actual pFromV output structure
+pressure_samples = zeros(4, size(posterior2, 2)); 
+optParams3 = zeros(4, 1);
+
+for k = 1:size(posterior2, 2)
+    temp_m_insar = get_full_m(optimizedM, posterior2(:, k), true, "insar", true); 
+    temp_m_gps = get_full_m(optimizedM, posterior2(:, k), true, "gps", true);
+    % Calculate pressure
+    % Assuming pFromV returns a vector or struct of pressures
+    pressure_samples(1,k) = spheroid_pFromV(temp_m_insar(1:8),0.25, 3.08*10^9,'volume');
+    pressure_samples(2,k) = spheroid_pFromV(temp_m_gps(1:8),0.25, 3.08*10^9,'volume');
+    pressure_samples(3,k) = spheroid_pFromV(temp_m_insar(9:16),0.25, 3.08*10^9,'volume');
+    pressure_samples(4,k) = spheroid_pFromV(temp_m_gps(9:16),0.25, 3.08*10^9,'volume');
+end
+for i = 1:4
+    pressure_samples(i,pressure_samples(i,:) < -50e6) = nan;
+    optParams3(i) = spheroid_pFromV([optimizedM(1:7), optParams2(i+2)],0.25, 3.08*10^9,'volume');
+end
+optimizedM(8) = optParams3(2); optimizedM(16) = optParams2(5);
+% Define the full list of parameters to plot in order (4x4 grid)
+finalParamNames = { ...
+  '$\Delta V_{\mathrm{HMM}}^{\mathrm{InSAR}}$', '$\Delta V_{\mathrm{HMM}}^{\mathrm{GPS}}$', '$V_{\mathrm{HMM}}$', '$x_{\mathrm{HMM}}$', ...
+  '$y_{\mathrm{HMM}}$', '$d_{\mathrm{HMM}}$', '$\alpha_{\mathrm{HMM}}$', '$x_{\mathrm{SC}}$', ...
+  '$y_{\mathrm{SC}}$', '$d_{\mathrm{SC}}$', '$\alpha_{\mathrm{SC}}$', '$\phi_{\mathrm{SC}}$', ...
+  '$\psi_{\mathrm{SC}}$', '$\Delta V_{\mathrm{SC}}^{\mathrm{InSAR}}$', '$\Delta V_{\mathrm{SC}}^{\mathrm{GPS}}$', '$V_{\mathrm{SC}}$' ...
 };
 
-% Scale units to appropriate factor
-% unitScaling = [1e-6, 1e-6, 1e-9, 1e-3, 1e-3, 1e-3, 1, ...
-%     1e-3, 1e-3, 1e-3, 1, 1, 1, 1e-6, 1e-6, 1e-9];
-unitScaling = [1e-9, 1e-9, 1e-3, 1e-3, 1e-3, 1, ...
-    1e-3, 1e-3, 1e-3, 1, 1, 1, 1e-9, 1e-9];
+plotScales = [ ...
+    1e-9, 1e-9, 1e-9, 1e-3, ...   % Row 1: dP_HMM, dP_HMM, V_HMM, x_HMM
+    1e-3, 1e-3, 1,    1e-3, ...   % Row 2: y_HMM, d_HMM, a_HMM, x_SC
+    1e-3, 1e-3, 1,    1,    ...   % Row 3: y_SC,  d_SC,  a_SC,  phi_SC
+    1,    1e-9, 1e-9, 1e-9  ...   % Row 4: psi_SC, dP_SC, dP_SC, V_SC
+];
 
-% histlims = [-50, 0; -40, 0; 0, 20; -0.1, 0.2; 0, 0.4; -1.5, -0.75; 1.3, 1.8; ...
-%     0, 2; -2.8, -2.0; -4.5, -3; 0.1, 0.6; 50, 80; 100, 180; -40, 0; -40, 0; 2, 15];
-histlims = [unitScaling' .* lb', unitScaling' .* ub'];
+% Define Source for each slot: 
+% 1=Run1(posterior), 2=Run2(posterior2), 3=Calculated(pressure_samples)
+% Mapping indices for lookup from the source arrays
+sourceMap = [ ...
+    2, 3;  2, 4;  2, 1;  1, 3; ... % Row 1 (Note: indices refer to row in source array)
+    1, 4;  1, 5;  1, 6;  1, 7; ... % Row 2
+    1, 8;  1, 9;  1, 10; 1, 11; ... % Row 3
+    1, 12; 2, 5;  2, 6;  2, 2  ... % Row 4
+];
 
-figure(5);
-clf;
+% 1 = paramNames, 2 = paramNames2, 3 = paramNames3 (pressures)
+
+
+figure(5); clf;
 tl = tiledlayout(4,4,'Padding','compact', 'TileSpacing','compact');
-priormeans = get_full_m(taiyi_parameters, [], false, "insar");
-load Data/paramDists.mat;
 
-for i = 1:length(paramNames)
+for i = 1:16
     ax = nexttile;
-    numBins = 100;
-    [counts, edges] = histcounts(posterior(i, :), numBins, 'Normalization', 'pdf');
-    binCenters = edges(1:end-1) + diff(edges)/2;
-
-    % Rescale for unit conversion
-    s = unitScaling(i);
-    binCenters = binCenters * s;
+    
+    % Retrieve data based on source map
+    srcType = sourceMap(i, 1);
+    srcIdx  = sourceMap(i, 2);
+    
+    if srcType == 1
+        data = posterior(srcIdx, :); % From Run 1 (Geometry)
+        priorName = paramNames{srcIdx};
+        mle = optParams(srcIdx);
+        lb_chosen = lb(srcIdx);
+        ub_chosen = ub(srcIdx);
+    elseif srcType == 2
+        data = posterior2(srcIdx, :); % From Run 2 (Volumes)
+        priorName = paramNames2{srcIdx};
+        mle = optParams2(srcIdx);
+        lb_chosen = lb2(srcIdx);
+        ub_chosen = ub2(srcIdx);
+    else
+        data = pressure_samples(srcIdx, :); % From Calculated Pressures
+        priorName = paramNames3{srcIdx};
+        mle = optParams3(srcIdx);
+        lb_chosen = lb3(srcIdx);
+        ub_chosen = ub3(srcIdx);
+    end
+    
+    % Create Histogram
+    s = plotScales(i);
+    [counts, edges] = histcounts(data(~isnan(data)), 50, 'Normalization', 'pdf');
+    binCenters = (edges(1:end-1) + diff(edges)/2) * s;
     counts = counts / s;
     
-    % Posterior PDF line in blue 
-    hPost = plot(binCenters(2:end), counts(2:end), 'Color',[0 0.4470 0.7410], 'LineWidth',4);
+    % Plot Posterior
+    hPost = plot(binCenters, counts, 'Color',[0 0.4470 0.7410], 'LineWidth', 3);
     hold on;
     
-    % MLE estimate as red dashed line 
-    hMLE = xline(optParams(i) * s, '--r', 'LineWidth',2.5);
+    % Plot MLE / Mean (For pressure/vol, use mean of samples; for geom use optParams)
+    if srcType == 1
+        val_mle = optParams(srcIdx) * s;
+    else
+        val_mle = mean(data) * s; % Use mean for derived parameters
+    end
+    xline(mle*s, '--r', 'LineWidth', 2);
     
+    % Plot Priors
     % Extend prior beyond posterior range by 10% each side
     span = edges(end) - edges(1);
-    xGrid = linspace(lb(i), ub(i), 400)';
-    name = plotParamNames{i};
-    p_prior = pdf(paramDists.(paramNames{i}).dist, xGrid);
+    xGrid = linspace(lb_chosen, ub_chosen, 400)';
+    name = finalParamNames{i};
+    p_prior = pdf(paramDists.(priorName).dist, xGrid);
     
     % Rescale prior 
     xGrid = xGrid * s;
     p_prior = p_prior / s;
     
     % Prior PDF in dark gray dashed 
-    if(i ~= 14 && i ~= 15 && i ~= 16)
+    % if(i ~= 14 && i ~= 15 && i ~= 16)
         hPrior = plot(xGrid, p_prior, '--', 'Color',[0.3 0.3 0.3], 'LineWidth',2.5);
-    end
-    
-    %xlim([lb(i)*s, ub(i)*s]);
-    xlim([histlims(i, 1), histlims(i, 2)]);
-    % Aesthetics 
+    % end
+
+    xlim([lb_chosen * s, ub_chosen * s]);
+    % Formatting
     grid on;
-    title(name, 'Interpreter','latex', 'FontSize', 30, "FontWeight","bold");
-    set(gca, 'YTickLabel', [], 'FontSize', 20);
+    title(finalParamNames{i}, 'Interpreter','latex', 'FontSize', 16);
+    axis square;
     
-    % compute and print the 90% prior interval
-    cdf_values = cumtrapz(xGrid, p_prior);
-    [cdf_u, ia] = unique(cdf_values);
-    x_u = xGrid(ia);
-
-    ci_vals = prctile(posterior(i, :), [5, 95]);
-    
-    % Apply unit scaling
-    lower_bound = ci_vals(1) * s;
-    upper_bound = ci_vals(2) * s;
-    
-    % Print result
-    fprintf('%s 90%% CI: [%.2e, %.2e], MLE = %.2e\n', ...
-            name, lower_bound, upper_bound, optParams(i)*s);
-    axis square
-    % xline(ci_vals(1) * s);
-    % xline(ci_vals(2) * s);
+    % Print CI stats
+    ci = prctile(data, [5 95]) * s;
+    fprintf('%s: 90%% CI [%.2f, %.2f]\n', finalParamNames{i}, ci(1), ci(2));
 end
 
-axLegend = nexttile(16);
-% axis(axLegend, 'off');   % make this tile invisible
+% Add Legend
+if saveFigs; exportgraphics(tl, './PaperFigs/combined_hist.png', 'Resolution', 300); end
 
-% Create legend manually
-leg = legend(axLegend, [hPost, hMLE, hPrior], ...
-       {'Posterior PDF', 'MAP estimate', 'Prior PDF'}, ...
-       'FontSize', 18, 'Box', 'on');
-
-set(leg, 'Units', 'normalized');%, 'Position', [0.793, 0.212, 0.172, 0.1]);
-hold off;
-
-if saveFigs
-    exportgraphics(tl, './PaperFigs/geo_hist.png', 'Resolution', 500);
-end
-
-
-gps_l2s(i) = gps_l2;
-insar_l2s(i) = insar_l2;
-
-disp("MCMC done");
-
-save("./Figures/optimizedM.mat");
 
 %% Plot correlation btwn parameters
-plotParamNames_nounit = {
-  '$\Delta p_{\mathrm{HMM}}^{\mathrm{InSAR}}$', ...
-  '$\Delta p_{\mathrm{HMM}}^{\mathrm{GPS}}$', ...
-  '$V_{\mathrm{HMM}}$', ...
-  '$x_{\mathrm{HMM}}$', ...
-  '$y_{\mathrm{HMM}}$', ...
-  '$d_{\mathrm{HMM}}$', ...
-  '$\alpha_{\mathrm{HMM}}$', ...
-  '$x_{\mathrm{SC}}$', ...
-  '$y_{\mathrm{SC}}$', ...
-  '$d_{\mathrm{SC}}$', ...
-  '$\alpha_{\mathrm{SC}}$', ...
-  '$\phi_{\mathrm{SC}}$', ...
-  '$\psi_{\mathrm{SC}}$', ...
-  '$\Delta p_{\mathrm{SC}}^{\mathrm{InSAR}}$', ...
-  '$\Delta p_{\mathrm{SC}}^{\mathrm{GPS}}$', ...
-  '$V_{\mathrm{SC}}$',
-};
-% assume posterior is already (nParams × nSamples)
-nparams = size(posterior,1);
-f = figure(12); clf;
-tl = tiledlayout(nparams,nparams,'Padding','tight','TileSpacing','tight');
-set(gcf,'Color','w');  % white background
-set(f, 'Units', 'pixels'); 
-set(f, 'Position', [100, 100, 1800, 1600]);
-
-numBins = 30;
-
-for i = 1:nparams
-    for j = 1:nparams
-        ax = nexttile(tl);
-        hold(ax,'on');
-        set(ax,'FontSize',8);
-        if i > j
-            % 2D density in lower triangle
-            postx = posterior(j,:);
-            posty = posterior(i,:);
-            [N, edgesX, edgesY] = histcounts2(postx,posty,numBins);
-            centersX = (edgesX(1:end-1)+edgesX(2:end))/2;
-            centersY = (edgesY(1:end-1)+edgesY(2:end))/2;
-            [X,Y] = meshgrid(centersX,centersY);
-            contourf(ax, X, Y, N.', 10, 'LineColor','none');
-            colormap(ax,'hot');
-            grid(ax,'on');
-            ax.YAxis.Visible = 'off';
-        elseif i == j
-            % 1D histogram on diagonal
-            histogram(ax, posterior(i,:), numBins, 'FaceColor',[.2 .6 .5]);
-            % title(ax, plotParamNames_nounit{i}, ...
-            %       'Interpreter','latex','FontSize',16);
-            text(ax, 0.5, 1.45, plotParamNames_nounit{i}, ...
-                'Units', 'normalized', ... 
-                'HorizontalAlignment', 'center', ...
-                'Interpreter', 'latex', ...
-                'FontSize', 28, ... % You can now make this huge without squishing
-                'FontWeight', 'bold');
-            ax.YAxis.Visible = 'off';
-        else
-            % blank above diagonal
-            axis(ax,'off');
-            continue
-        end
-
-        % restore tick labels everywhere
-        ax.XAxis.Visible = 'off';
-
-
-
-        % only bottom row: add xlabel
-        if i == nparams
-            ax.XLabel.String = plotParamNames_nounit{j};
-            ax.XLabel.Interpreter = 'latex';
-            ax.XLabel.FontSize = 20;
-            ax.XAxis.Visible = 'on';
-        else
-            ax.XLabel.String = '';
-        end
-
-        % only first column: add ylabel
-        if j == 1
-            ax.YLabel.String = plotParamNames_nounit{i};
-            ax.YLabel.Interpreter = 'latex';
-            ax.YLabel.FontSize = 20;
-            ax.YAxis.Visible = 'on';
-        else
-            ax.YLabel.String = '';
-        end
-    end
-end
-
-sgtitle(tl, "2D Density (lower triangle) & Histograms (diag.) for MCMC", ...
-        'FontWeight','normal', 'FontSize', 30);
-
-if saveFigs
-    exportgraphics(tl, './PaperFigs/corr_plot.png','Resolution',500);
-end
-
-clearvars i j options resnorm resdpos dsize dangle A b res;
+% plotParamNames_nounit = {
+%   '$\Delta p_{\mathrm{HMM}}^{\mathrm{InSAR}}$', ...
+%   '$\Delta p_{\mathrm{HMM}}^{\mathrm{GPS}}$', ...
+%   '$V_{\mathrm{HMM}}$', ...
+%   '$x_{\mathrm{HMM}}$', ...
+%   '$y_{\mathrm{HMM}}$', ...
+%   '$d_{\mathrm{HMM}}$', ...
+%   '$\alpha_{\mathrm{HMM}}$', ...
+%   '$x_{\mathrm{SC}}$', ...
+%   '$y_{\mathrm{SC}}$', ...
+%   '$d_{\mathrm{SC}}$', ...
+%   '$\alpha_{\mathrm{SC}}$', ...
+%   '$\phi_{\mathrm{SC}}$', ...
+%   '$\psi_{\mathrm{SC}}$', ...
+%   '$\Delta p_{\mathrm{SC}}^{\mathrm{InSAR}}$', ...
+%   '$\Delta p_{\mathrm{SC}}^{\mathrm{GPS}}$', ...
+%   '$V_{\mathrm{SC}}$',
+% };
+% % assume posterior is already (nParams × nSamples)
+% nparams = size(posterior,1);
+% f = figure(12); clf;
+% tl = tiledlayout(nparams,nparams,'Padding','tight','TileSpacing','tight');
+% set(gcf,'Color','w');  % white background
+% set(f, 'Units', 'pixels'); 
+% set(f, 'Position', [100, 100, 1800, 1600]);
+% 
+% numBins = 30;
+% 
+% for i = 1:nparams
+%     for j = 1:nparams
+%         ax = nexttile(tl);
+%         hold(ax,'on');
+%         set(ax,'FontSize',8);
+%         if i > j
+%             % 2D density in lower triangle
+%             postx = posterior(j,:);
+%             posty = posterior(i,:);
+%             [N, edgesX, edgesY] = histcounts2(postx,posty,numBins);
+%             centersX = (edgesX(1:end-1)+edgesX(2:end))/2;
+%             centersY = (edgesY(1:end-1)+edgesY(2:end))/2;
+%             [X,Y] = meshgrid(centersX,centersY);
+%             contourf(ax, X, Y, N.', 10, 'LineColor','none');
+%             colormap(ax,'hot');
+%             grid(ax,'on');
+%             ax.YAxis.Visible = 'off';
+%         elseif i == j
+%             % 1D histogram on diagonal
+%             histogram(ax, posterior(i,:), numBins, 'FaceColor',[.2 .6 .5]);
+%             % title(ax, plotParamNames_nounit{i}, ...
+%             %       'Interpreter','latex','FontSize',16);
+%             text(ax, 0.5, 1.45, plotParamNames_nounit{i}, ...
+%                 'Units', 'normalized', ... 
+%                 'HorizontalAlignment', 'center', ...
+%                 'Interpreter', 'latex', ...
+%                 'FontSize', 28, ... % You can now make this huge without squishing
+%                 'FontWeight', 'bold');
+%             ax.YAxis.Visible = 'off';
+%         else
+%             % blank above diagonal
+%             axis(ax,'off');
+%             continue
+%         end
+% 
+%         % restore tick labels everywhere
+%         ax.XAxis.Visible = 'off';
+% 
+% 
+% 
+%         % only bottom row: add xlabel
+%         if i == nparams
+%             ax.XLabel.String = plotParamNames_nounit{j};
+%             ax.XLabel.Interpreter = 'latex';
+%             ax.XLabel.FontSize = 20;
+%             ax.XAxis.Visible = 'on';
+%         else
+%             ax.XLabel.String = '';
+%         end
+% 
+%         % only first column: add ylabel
+%         if j == 1
+%             ax.YLabel.String = plotParamNames_nounit{i};
+%             ax.YLabel.Interpreter = 'latex';
+%             ax.YLabel.FontSize = 20;
+%             ax.YAxis.Visible = 'on';
+%         else
+%             ax.YLabel.String = '';
+%         end
+%     end
+% end
+% 
+% sgtitle(tl, "2D Density (lower triangle) & Histograms (diag.) for MCMC", ...
+%         'FontWeight','normal', 'FontSize', 30);
+% 
+% if saveFigs
+%     exportgraphics(tl, './PaperFigs/corr_plot.png','Resolution',500);
+% end
+% 
+% clearvars i j options resnorm resdpos dsize dangle A b res;
 
 %% Creating greens functions using the new parameters for M
 [gHMM, gSC] = creategreens(optimizedM(1:8), optimizedM(9:end));
@@ -649,8 +718,8 @@ N_draws = 10;
 N_noise = 5;
 
 disp("Getting errors...")
-[dp_low, dp_high, u_low, u_high] = GetErrors(N_draws, N_noise, posterior, paramDists, ntime, ux, uy, uz, tiltx, tilty, dispstd, ...
-    GPSNameList, rw_stddev, dp_weight, taiyi_parameters, npitloc, invStdPWRL, nanstatbeginning, paramNames, optParams);
+[dp_low, dp_high, u_low, u_high] = GetErrors(N_draws, N_noise, posterior, posterior2, pressure_samples, paramDists, ntime, ux, uy, uz, tiltx, tilty, dispstd, ...
+    GPSNameList, rw_stddev, dp_weight, taiyi_parameters, npitloc, invStdPWRL, nanstatbeginning, paramNames, paramNames2, paramNames3, optimizedM);
 
 %% Creating a matrix to store all predicted displacements + tilts in var called usim
 %all errors are stored in u_error_low/high
@@ -731,7 +800,7 @@ makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilty, usim, 
 
 %% Insar plotting
 % Set if we want to plot the ascending or descending track with insarmode
-insarmode = "desc";
+insarmode = "asc";
 % make predicted insar data
 if(insarmode == "asc")
     ind = (insar_lengths(1) + 1):sum(insar_lengths);
@@ -753,6 +822,6 @@ xon = true; yon = false;
 % Set if colorbar is on
 con = true;
 
-plot_insar_new(insarx(ind), insary(ind), insaru_full(ind), block_size(ind), look, x, y, u1d, u1d, xon, yon, con, ...
+plot_insar_new(insarx(ind), insary(ind), insaru_pred', block_size(ind), look, x, y, u1d, u1d, xon, yon, con, ...
     31, GPSNameList, optimizedM, coast_new,cLimits, opacity, saveFigs, insarmode);
 %  - insaru_pred' insaru_full(ind)

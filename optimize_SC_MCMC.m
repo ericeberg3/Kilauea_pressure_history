@@ -1,10 +1,15 @@
 function [optParams, posterior, L_keep, gps_l2, insar_l2, prior_l2] = optimize_SC_MCMC(m_known, lb, ub, xopt, yopt, zopt, u1d, ...
      insarx, insary, insaru, look, insar_lengths, cinv_full, invStdPWRL, nanstatbeginning, ...
-     ntrials, gps_weight, prior_weight, paramNames, burn, saveFigs)
+     ntrials, gps_weight, prior_weight, paramNames, burn, second_run, saveFigs)
 
 GPS_std = 1./invStdPWRL;
 priormeans = get_full_m(m_known, [], false, "insar");
-if(any(priormeans > ub) || any(priormeans < lb)); error("Initial guess is not within bounds"); end
+if(second_run)
+    priormeans = get_full_m(m_known, [], false, "insar", second_run);
+    priormeans(1:2) = [4e9, 3e9]; 
+end
+out_of_bnds = priormeans > ub | priormeans < lb;
+if(any(out_of_bnds)); error("Initial guess is not within bounds index " + strjoin(string(find(out_of_bnds)), ', ')); end
 % priormeans = priormeans + 0.1*randn(1,6) .* priormeans;
 % paramNames = ["HMM volume", "dpHMM", "vert semi-diameter", "horiz semi-diameter", "dip", "dpSC"];
 
@@ -19,11 +24,11 @@ end
 % xstep = 0.02*ones(1,6); % 0.02
 % xstep(4) = 0.007; % horiz semi-diam 
 
-xstep = 2.5e-2*ones(1,size(bnds,1)); % 4e-2
+xstep = 1.4e-1*ones(1,size(bnds,1)); % 2.5e-2
 
 [x_keep, L_keep, count, gps_l2, insar_l2, prior_l2] = mcmc('create_MCMC_data',[u1d(:);insaru(:)],priormeans,xstep, ...
     bnds, sigma, cinv_full, ntrials, gps_weight, prior_weight, paramNames, burn,...
-    m_known, xopt, yopt, zopt, insarx, insary, look, insar_lengths, nanstatbeginning);
+    m_known, xopt, yopt, zopt, insarx, insary, look, insar_lengths, nanstatbeginning, second_run);
 
 % burn = 4e3;
 
