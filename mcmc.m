@@ -36,6 +36,7 @@ if( size(xbnds,1) ~= Nparams |  size(xbnds,2) ~= 2)
     disp('Dimension of xbnds is not valid')
     return
 end
+% TODO could check that x0 lies within bounds
 
 x_keep=zeros(Nparams,Niter); 
 L_keep=zeros(1,Niter); 
@@ -64,6 +65,8 @@ end
 L = L_scaling * (L_gps*gps_weighting + L_insar + insar_weight*prior_prob);
 barLength = 25;
 prevStr = '';
+
+
 
 count=0;
 xstep_int = xstep;

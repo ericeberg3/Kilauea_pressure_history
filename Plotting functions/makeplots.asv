@@ -132,7 +132,7 @@ function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilt
 
     ax4 = nexttile; hold(ax4, 'on');
     patch(ax4, xPatch, yPatch_SC, greyColor, 'FaceAlpha', 0.5, 'EdgeColor', 'none');
-    plot(ax4, tvec, hmm_vp, 'Color', [199, 160, 160]./255, 'LineWidth', 2, 'DisplayName', 'HMM');
+    plot(ax4, tvec, hmm_vp, 'Color', [199, 16], 'LineWidth', 2, 'DisplayName', 'HMM');
     plot(ax4, tvec, sc_vp, 'Color', pressure_color, 'LineWidth', 2, 'DisplayName', 'SC');
     grid on; box on; axis square;
     set(ax4, 'LineWidth', 1.4);
@@ -141,7 +141,26 @@ function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilt
     ylim(ax4, [-0.05, 0.005])
     ylabel("Volume change [km^3]", 'FontSize', baseFont+2);
     title("Volume change history", 'FontSize', baseFont+4)
-    % legend(ax4, "FontSize", baseFont, "Location", "southwest")
+    legend(ax4, "FontSize", baseFont, "Location", "southwest")
+
+%%
+    % ax1 = nexttile;  hold(ax1,'on'); 
+    % 
+    % xPatch     = [tvec; flipud(tvec)];
+    % yPatch_HMM = [hmm_scale * dp_low(idx,1); ...
+    %               flipud(hmm_scale * dp_high(idx,1))];
+    % greyColor = [0.7, 0.7, 0.7];
+    % pressure_color = "#c70000";
+    % patch(ax1, xPatch, yPatch_HMM, greyColor, 'FaceAlpha', 0.5, 'EdgeColor', 'none');
+    % 
+    % plot(ax1, tvec, hmm_scale*hmm_pressure,...
+    %      'Color',pressure_color, 'LineWidth',2,'DisplayName','HMM Pressure');
+    % ax1.XAxis.FontSize = baseFont - 4;
+    % ax1.YAxis.FontSize = baseFont - 4;
+    % ylabel('Pressure Change [MPa]','FontSize',baseFont+2)
+    % title('Halemaʻumaʻu (HMM)', 'FontSize', baseFont+4)
+    % grid on; box on; axis square
+    % set(ax1,'LineWidth',1.4, 'YLim', [-15, 5]);
 
     %%  Collapse markers & amplitude calculation
     %   Put this block *after* the two plots are finished (but before exportgraphics).

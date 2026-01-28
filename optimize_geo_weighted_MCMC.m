@@ -161,11 +161,14 @@ invStdPWRL = invStdPWRL(:);
 
 %% Optimizing geometry
 % Setting up parameters from Wang et al. 2021 for reference
+% taiyi_parameters = [1600.79, 914.47, 90, 0, 0.46e3 + npitloc(1), 0.35e3 + npitloc(2), -2.18e3, -4e7, ... 
+%     277.01, 1621.47, 63, 136, npitloc(1) + 1890, npitloc(2) - 3030, -3630, -10e6];
 % Use taiyi + kyle for HMM 
 % taiyi_parameters = [1600.79, 914.47, 90, 0, 50, 200, -2.18e3, -4e7, ... 
 %      277.01, 1621.47, 63, 136, npitloc(1) + 1890, npitloc(2) - 3030, -3630, -10e6];
-taiyi_parameters = [1600.79, 914.47, 90, 0, 50, 200, -2.18e3, -4.5e6, ... 
-     277.01, 1621.47, 63, 136, npitloc(1) + 1890, npitloc(2) - 3030, -3630, -1.5e7];
+
+taiyi_parameters = [1600.79, 914.47, 90, 0, 50, 200, -2.18e3, -4e7, ... 
+     277.01, 1621.47, 63, 136, npitloc(1) + 1890, npitloc(2) - 3030, -3630, -10e6];
 
 % Setting up parameters from Roman et al. 2021 for reference
 aspect_ratio_HMM = 1;
@@ -193,11 +196,10 @@ roman_parameters = [vert_sd_HMM, vert_sd_HMM/(aspect_ratio_HMM), 90, 0, 0, 0, -9
 % ub = [1e6, 1e6, 3e10, 227, 1050, -7.5e2, 1.8, ...
 %      2.2e3, -0.45e3, -2.7e3, 1, 90, 180, 1e6, 1e6, 20e9]; 
 
-
-lb = [-1e8, -1e8, -100, 0, -16e2, 0.8, ...
-    -2.7e3, -2.8e3, -4.7e3, 0.1, 45, 0, -1e8, -1e8]; 
-ub = [1e8, 1e8, 227, 1050, -7.5e2, 1.8, ...
-     2.2e3, -0.45e3, -2.7e3, 1, 90, 180, 1e8, 1e8]; 
+lb = [-5e7, -5e7, 1e8, -100, 0, -16e2, 0.8, ...
+    -2.7e3, -2.8e3, -4.7e3, 0.1, 45, 0, -5e7, -5e7, 2.0e9]; 
+ub = [1e6, 1e6, 3e10, 227, 1050, -7.5e2, 1.8, ...
+     2.2e3, -0.45e3, -2.7e3, 1, 90, 180, 1e6, 1e6, 20e9]; 
 
 % Save figures for export
 saveFigs = true;
@@ -262,11 +264,9 @@ insarx = [insarx_asc, insarx_desc];
 insary = [insary_asc, insary_desc];
 block_size = [blocks_asc, blocks_desc];
 
-%% MCMC Static inversion #1 - Volume change
-% paramNames = {'dpHMM_insar', 'dpHMM_gps', 'volHMM', 'xHMM', 'yHMM', 'dHMM', 'alphaHMM' ...
-%     'xSC', 'ySC', 'dSC', 'alphaSC', 'dipSC', 'strikeSC', 'dpSC_insar', 'dpSC_gps', 'volSC'};
-paramNames = {'dvHMM_insar', 'dvHMM_gps', 'xHMM', 'yHMM', 'dHMM', 'alphaHMM' ...
-    'xSC', 'ySC', 'dSC', 'alphaSC', 'dipSC', 'strikeSC', 'dvSC_insar', 'dvSC_gps'};
+%% MCMC Static inversion
+paramNames = {'dpHMM_insar', 'dpHMM_gps', 'volHMM', 'xHMM', 'yHMM', 'dHMM', 'alphaHMM' ...
+    'xSC', 'ySC', 'dSC', 'alphaSC', 'dipSC', 'strikeSC', 'dpSC_insar', 'dpSC_gps', 'volSC'};
 ntrials = 2e5; % Customize to get convergence
 
 % Testing GPS and prior weights.
@@ -302,9 +302,9 @@ else
     optParams_list = zeros(length(paramNames), length(gps_weights));
     l_curve_points = zeros(3,length(gps_weights));
 end
-start_params = taiyi_parameters;
+% start_params = taiyi_parameters;
 % Move taiyi depth down a bit
-start_params(7) = start_params(7) - 300;
+% start_params(7) = start_params(7) - 300;
 for i = 1:n_l_curve
     prior_params = start_params;
     
@@ -328,8 +328,7 @@ for i = 1:n_l_curve
         start_params = get_full_m(taiyi_parameters, real(optParams)', true, "insar");
 
         if(~run_L_curve)
-            % save Data/MCMC_1e6_SCvol_topbnd.mat optParams posterior L_keep gps_l2 insar_l2 prior_l2;
-            save Data/MCMC_1e5_dVinversion_gps15_prior100.mat optParams posterior L_keep gps_l2 insar_l2 prior_l2;
+            save Data/MCMC_1e6_SCvol_topbnd.mat optParams posterior L_keep gps_l2 insar_l2 prior_l2;
         else
             l_curve_points(1,i) = gps_l2;
             l_curve_points(2,i) = insar_l2;
@@ -339,8 +338,8 @@ for i = 1:n_l_curve
             optParams_list(:, i) = optParams;
         end
     else
-        % load Data/MCMC_1e6_SCvol_topbnd.mat;
-        load Data/MCMC_1e6_dVinversion.mat;
+        % load Data/MCMC_vars_1e6_allparams_nodpineq.mat;
+        load Data/MCMC_1e6_SCvol_topbnd.mat;
         [~, ind] = max(L_keep);
         optParams = posterior(:, ind);
     end
@@ -363,87 +362,15 @@ if(run_L_curve)
 end
 end
 
-
-
+% Get the full geometry parameters based on the optimization results:
+disp("GPS L2: " + gps_l2 + " InSAR L2: " + insar_l2);
+optimizedM = get_full_m(taiyi_parameters, optParams, true, "insar");
 
 %%
 % Show parameter table
 disp(array2table(optParams(:).', 'VariableNames',paramNames));
 % Make sure parameters are real
 optParams = real(optParams);
-
-%% MCMC inversion #2: Volume + pressure change inversion
-paramNames2 = {'volHMM', 'volSC', 'dvHMM_insar', 'dvHMM_gps', 'dvSC_insar', 'dvSC_gps'};
-
-% Update priors from run 1 posterior:
-load Data/paramDists.mat paramDists;
-vars_to_transfer = {'dvHMM_insar', 'dvHMM_gps', 'dvSC_insar', 'dvSC_gps'};
-
-figure(1); clf;
-for i = 1:length(vars_to_transfer)
-    pName = vars_to_transfer{i};
-
-    % Find the index of this parameter in the Run 1 paramNames list
-    % (We assume paramNames from Run 1 exists in workspace)
-    idx = find(strcmp(paramNames, pName));
-    if isempty(idx)
-        warning('Parameter %s not found in Run 1 results.', pName);
-        continue;
-    end
-
-    % Extract the samples
-    samples = posterior(idx, :);
-    
-    % 3. Fit a Kernel Distribution (Smooths the histogram into a pdf)
-    % This creates a probability object that supports the .pdf() method
-    pd = fitdist(samples', 'Normal'); 
-    subplot(2,2,i);
-    histogram(samples, 50, 'Normalization','pdf');
-    hold on;
-    x_grid = linspace(min(samples), max(samples), 100); % 100 points for smoothness
-    y_vals = pdf(pd, x_grid);
-    plot(x_grid, y_vals, 'LineWidth', 2, 'Color', 'r');
-
-    % 4. Update the paramDists structure
-    paramDists.(pName).dist = pd;
-    paramDists.(pName).samples = samples; 
-    paramDists.(pName).family = 'prob.KernelDistribution';
-    
-    % Optional: Print check
-    fprintf('  -> %s updated (Mean: %.2e)\n', pName, mean(samples));
-end
-
-
-save Data/paramDists.mat paramDists;
-%%
-% Run second MCMC
-lb2 = [1e8, 2e9, -1e8, -1e8, -1e8, -1e8];
-ub2 = [3e10, 2e10, 0, 0, 0, 0];
-ntrials2 = 1e5;
-runMCMC = false;
-% x_guess = [4e9, 3e9, optParams(1), optParams(2), optParams(13), optParams(14)];
-if(runMCMC)
-    [optParams2, posterior2, L_keep2, ~, ~, ~] = optimize_SC_MCMC(optimizedM, lb2, ub2, xopt, ...
-                yopt, zopt, u1d', insarx, insary, insaru_full', look, insar_lengths, sparse(cinv_full), daily_inv_std, ...
-                nanstatend, ntrials2, 30, 200, paramNames2, burn, true, false, saveFigs); % subsample set to true
-    save Data/MCMC2_1e5_dVinversion_gps15_prior100.mat optParams2 posterior2 L_keep2;
-else
-    load Data/MCMC2_1e6_vol_inversion.mat
-end
-% Adjust optimizedM to reflect the new calc volume + volume change
-% HMM_AR = optimizedM(1)/optimizedM(2);
-% HMM_volume = optParams2(1);
-% vert_sd = (3/(4*pi) * HMM_volume * (HMM_AR^2))^(1/3);
-% horiz_sd = vert_sd/(HMM_AR);
-% optimizedM(1:2) = [vert_sd, horiz_sd];
-% 
-% SC_AR = optimizedM(9)/optimizedM(10);
-% SC_volume = optParams2(2);
-% vert_sd = (3/(4*pi) * SC_volume * (SC_AR^2))^(1/3);
-% horiz_sd = vert_sd/(SC_AR);
-% optimizedM(9:10) = [vert_sd, horiz_sd];
-
-optimizedM = get_full_m(optimizedM, optParams2, true, "insar", true);
 
 %% Test diff optimizedM
 % optParams1(1) = 1e3;
@@ -452,59 +379,33 @@ optimizedM = get_full_m(optimizedM, optParams2, true, "insar", true);
 % optParams2(3) = 1;
 % optimizedM = get_full_m(optimizedM, optParams2, true, "insar", true);
 
-%% New histogram plotting
-paramNames3 = {'dpHMM_insar', 'dpHMM_gps', 'dpSC_insar', 'dpSC_gps'};
-lb3 = [-5e7, -5e7, -5e7, -5e7];
-ub3 = [0, 0, 0, 0];
-% 1. Pre-allocate pressure arrays (N_samples x 4: HMM_insar, HMM_gps, SC_insar, SC_gps)
-% We assume pFromV returns [dpHMM_insar, dpHMM_gps, dpSC_insar, dpSC_gps]
-% Adjust the indices based on your actual pFromV output structure
-pressure_samples = zeros(4, size(posterior2, 2)); 
-optParams3 = zeros(4, 1);
 
-for k = 1:size(posterior2, 2)
-    temp_m_insar = get_full_m(optimizedM, posterior2(:, k), true, "insar", true); 
-    temp_m_gps = get_full_m(optimizedM, posterior2(:, k), true, "gps", true);
-    % Calculate pressure
-    % Assuming pFromV returns a vector or struct of pressures
-    pressure_samples(1,k) = spheroid_pFromV(temp_m_insar(1:8),0.25, 3.08*10^9,'volume');
-    pressure_samples(2,k) = spheroid_pFromV(temp_m_gps(1:8),0.25, 3.08*10^9,'volume');
-    pressure_samples(3,k) = spheroid_pFromV(temp_m_insar(9:16),0.25, 3.08*10^9,'volume');
-    pressure_samples(4,k) = spheroid_pFromV(temp_m_gps(9:16),0.25, 3.08*10^9,'volume');
-end
-for i = 1:4
-    pressure_samples(i,pressure_samples(i,:) < -50e6) = nan;
-    optParams3(i) = spheroid_pFromV([optimizedM(1:7), optParams2(i+2)],0.25, 3.08*10^9,'volume');
-end
-% optimizedM(8) = optParams3(2); optimizedM(16) = optParams2(5);
-% Define the full list of parameters to plot in order (4x4 grid)
-finalParamNames = { ...
-  '$\Delta V_{\mathrm{HMM}}^{\mathrm{InSAR}}$', '$\Delta V_{\mathrm{HMM}}^{\mathrm{GPS}}$', '$V_{\mathrm{HMM}}$', '$x_{\mathrm{HMM}}$', ...
-  '$y_{\mathrm{HMM}}$', '$d_{\mathrm{HMM}}$', '$\alpha_{\mathrm{HMM}}$', '$x_{\mathrm{SC}}$', ...
-  '$y_{\mathrm{SC}}$', '$d_{\mathrm{SC}}$', '$\alpha_{\mathrm{SC}}$', '$\phi_{\mathrm{SC}}$', ...
-  '$\psi_{\mathrm{SC}}$', '$\Delta V_{\mathrm{SC}}^{\mathrm{InSAR}}$', '$\Delta V_{\mathrm{SC}}^{\mathrm{GPS}}$', '$V_{\mathrm{SC}}$' ...
+%% Plot histogram of each parameter
+plotParamNames = {
+  '$\Delta p_{\mathrm{HMM}}^{\mathrm{InSAR}}\ (\mathrm{MPa})$', ...
+  '$\Delta p_{\mathrm{HMM}}^{\mathrm{GPS}}\ (\mathrm{MPa})$', ...
+  '$V_{\mathrm{HMM}}\ (\mathrm{km}^3)$', ...
+  '$x_{\mathrm{HMM}}\ (\mathrm{km})$', ...
+  '$y_{\mathrm{HMM}}\ (\mathrm{km})$', ...
+  '$d_{\mathrm{HMM}}\ (\mathrm{km})$', ...
+  '$\alpha_{\mathrm{HMM}}$', ...
+  '$x_{\mathrm{SC}}\ (\mathrm{km})$', ...
+  '$y_{\mathrm{SC}}\ (\mathrm{km})$', ...
+  '$d_{\mathrm{SC}}\ (\mathrm{km})$', ...
+  '$\alpha_{\mathrm{SC}}$', ...
+  '$\phi_{\mathrm{SC}}\ (^\circ)$', ...
+  '$\psi_{\mathrm{SC}}\ (^\circ)$', ...
+  '$\Delta p_{\mathrm{SC}}^{\mathrm{InSAR}}\ (\mathrm{MPa})$', ...
+  '$\Delta p_{\mathrm{SC}}^{\mathrm{GPS}}\ (\mathrm{MPa})$', ...
+  '$V_{\mathrm{SC}}\ (\mathrm{km}^3)$',
 };
 
-plotScales = [ ...
-    1e-9, 1e-9, 1e-9, 1e-3, ...   % Row 1: dP_HMM, dP_HMM, V_HMM, x_HMM
-    1e-3, 1e-3, 1,    1e-3, ...   % Row 2: y_HMM, d_HMM, a_HMM, x_SC
-    1e-3, 1e-3, 1,    1,    ...   % Row 3: y_SC,  d_SC,  a_SC,  phi_SC
-    1,    1e-9, 1e-9, 1e-9  ...   % Row 4: psi_SC, dP_SC, dP_SC, V_SC
-];
+% Scale units to appropriate factor
+unitScaling = [1e-6, 1e-6, 1e-9, 1e-3, 1e-3, 1e-3, 1, ...
+    1e-3, 1e-3, 1e-3, 1, 1, 1, 1e-6, 1e-6, 1e-9];
 
-% Define Source for each slot: 
-% 1=Run1(posterior), 2=Run2(posterior2), 3=Calculated(pressure_samples)
-% Mapping indices for lookup from the source arrays
-sourceMap = [ ...
-    2, 3;  2, 4;  2, 1;  1, 3; ... % Row 1 (Note: indices refer to row in source array)
-    1, 4;  1, 5;  1, 6;  1, 7; ... % Row 2
-    1, 8;  1, 9;  1, 10; 1, 11; ... % Row 3
-    1, 12; 2, 5;  2, 6;  2, 2  ... % Row 4
-];
-
-
-% 1 = paramNames, 2 = paramNames2, 3 = paramNames3 (pressures)
-
+histlims = [-50, 0; -40, 0; 0, 20; -0.1, 0.2; 0, 0.4; -1.5, -0.75; 1.3, 1.8; ...
+    0, 2; -2.8, -2.0; -4.5, -3; 0.1, 0.6; 50, 80; 100, 180; -40, 0; -40, 0; 2, 15];
 
 figure(5); clf;
 tl = tiledlayout(4,4,'Padding','compact', 'TileSpacing','compact');
@@ -732,8 +633,7 @@ dp(TF, 1) = NaN;
 dp(:, 1) = fillmissing(dp(:, 1), "makima", 1);
 
 %% Error analysis
-
-N_draws = 25;
+N_draws = 200;
 N_noise = 5;
 
 disp("Getting errors...")

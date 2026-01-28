@@ -33,7 +33,7 @@ function data = create_MCMC_data(m, m_guess, x, y, z, insarx, insary, ...
     % GPS data generation
     [gHMM, ~, ~, ~] = spheroid(mHMM, [x(1:end); y(1:end); z(1:end)], 0.25, 3.08*10^9, pressure_flag);
     [gSC, ~, ~, ~] = spheroid(mSC, [x(1:end); y(1:end); z(1:end)], 0.25, 3.08*10^9, pressure_flag);
-    
+
     gtot = gHMM + gSC;
     GPS_data = gtot(:);
 
@@ -51,7 +51,7 @@ function data = create_MCMC_data(m, m_guess, x, y, z, insarx, insary, ...
         
         [gHMM, ~, ~, ~] = spheroid(mHMM, [insarx(inds); insary(inds); zeros(size(insarx(inds)))], 0.25, 3.08*10^9, pressure_flag);
         [gSC, ~, ~, ~] = spheroid(mSC, [insarx(inds); insary(inds); zeros(size(insarx(inds)))], 0.25, 3.08*10^9, pressure_flag);
-    
+
         gtot = gHMM + gSC;
         insar_data(inds) = gtot' * look(:,i);
     end
