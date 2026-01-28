@@ -267,16 +267,17 @@ block_size = [blocks_asc, blocks_desc];
 %     'xSC', 'ySC', 'dSC', 'alphaSC', 'dipSC', 'strikeSC', 'dpSC_insar', 'dpSC_gps', 'volSC'};
 paramNames = {'dvHMM_insar', 'dvHMM_gps', 'xHMM', 'yHMM', 'dHMM', 'alphaHMM' ...
     'xSC', 'ySC', 'dSC', 'alphaSC', 'dipSC', 'strikeSC', 'dvSC_insar', 'dvSC_gps'};
-ntrials = 1e5; % Customize to get convergence
+ntrials = 2e5; % Customize to get convergence
 
 % Testing GPS and prior weights.
 % gps_weights = linspace(4e1, 8e1, 10);
 % prior_weights = linspace(3e2, 1e3, 10);
-gps_weights = linspace(8e1, 6e2, 15);
+gps_weights = linspace(8e1, 6e2, 12);
 prior_weights = linspace(7e1, 1e5, 10);
 
 gps_weight = 6.7e1; % Optimal weight based on L curve
-prior_weight = 0;%5.3e2; % Optimal weight based on L curve
+prior_weight = 5.3e2;%5.3e2; % Optimal weight based on L curve
+insar_weight = 0;
 % burn = 0.5e3;
 burn = 4e3;
 
@@ -284,10 +285,11 @@ delete(gcp('nocreate'));
 
 % --- Set if we want to run MCMC, plot the L curve, and the type of L curve
 % to create --- %
-runMCMC = false;
-run_L_curve = false;
+solveweights = false;
+runMCMC = true;
+run_L_curve = true;
 l_curve_type = "gps"; % 'prior' to test prior weights, 'gps' to test gps weights
-% for l_curve_type = ["prior", "gps"]
+for l_curve_type = ["prior", "gps"]
 % For loop to create L curve
 n_l_curve = length(gps_weights);
 if(~run_L_curve)
@@ -310,18 +312,24 @@ for i = 1:n_l_curve
     % appropriately
     if(run_L_curve)
         if(l_curve_type == "prior"); prior_weight = prior_weights(i); gps_weight = 6.7e1;
-        else; prior_weight = 2.1e2; gps_weight = gps_weights(i); end
+        else; prior_weight = 5.3e2; gps_weight = gps_weights(i); end
     end
         
     if(runMCMC)
-        [optParams, posterior, L_keep, gps_l2, insar_l2, prior_l2] = optimize_SC_MCMC(prior_params, lb, ub, xopt, ...
+        [optParams, posterior, L_keep, gps_l2, insar_l2, prior_l2, weights] = optimize_SC_MCMC(prior_params, lb, ub, xopt, ...
             yopt, zopt, u1d', insarx, insary, insaru_full', look, insar_lengths, sparse(cinv_full), daily_inv_std, ...
-            nanstatend, ntrials, gps_weight, prior_weight, paramNames, burn, false, saveFigs); % subsample set to true
-        start_params = get_full_m(taiyi_parameters, real(optParams'), true, "insar");
+            nanstatend, ntrials, 15, 100, paramNames, burn, false, solveweights, saveFigs); % subsample set to true
+        if(solveweights)
+            opt_weights = optParams(end-1:end);
+            gps_weight = 10^opt_weights(1);
+            insar_weight = 10^opt_weights(2);
+            optParams = optParams(1:end-2);
+        end
+        start_params = get_full_m(taiyi_parameters, real(optParams)', true, "insar");
 
         if(~run_L_curve)
             % save Data/MCMC_1e6_SCvol_topbnd.mat optParams posterior L_keep gps_l2 insar_l2 prior_l2;
-            save Data/MCMC_1e6_dVinversion_noprior.mat optParams posterior L_keep gps_l2 insar_l2 prior_l2;
+            save Data/MCMC_1e5_dVinversion_gps15_prior100.mat optParams posterior L_keep gps_l2 insar_l2 prior_l2;
         else
             l_curve_points(1,i) = gps_l2;
             l_curve_points(2,i) = insar_l2;
@@ -334,25 +342,28 @@ for i = 1:n_l_curve
         % load Data/MCMC_1e6_SCvol_topbnd.mat;
         load Data/MCMC_1e6_dVinversion.mat;
         [~, ind] = max(L_keep);
-        optParams = posterior(:, ind)';
+        optParams = posterior(:, ind);
     end
     
 end
+%%
+% Get the full geometry parameters based on the optimization results:
+l_curve_type = "gps";
+load("Data/l_curve_data_" + l_curve_type + "_inversion1.mat", "l_curve_points", "l_curve_type", "prior_weights", "gps_weights");
+disp("GPS L2: " + gps_l2 + " InSAR L2: " + insar_l2);
+optimizedM = get_full_m(taiyi_parameters, optParams, true, "insar");
 % Save and plot l curve data
 if(run_L_curve)
-    save("Data/l_curve_data_" + l_curve_type + "_prior_210.mat", "l_curve_points", "l_curve_type", "prior_weights", "gps_weights");
+    % save("Data/l_curve_data_" + l_curve_type + "_inversion1.mat", "l_curve_points", "l_curve_type", "prior_weights", "gps_weights");
     % load Data/l_curve_data_prior.mat;
     posterior = squeeze(posteriors_list(:, :, end));
     optParams = optParams_list(:, end)';
     disp(gps_weights(end));
     plotLcurve(l_curve_points, l_curve_type, prior_weights, gps_weights);
 end
+end
 
-% end
 
-% Get the full geometry parameters based on the optimization results:
-disp("GPS L2: " + gps_l2 + " InSAR L2: " + insar_l2);
-optimizedM = get_full_m(taiyi_parameters, optParams, true, "insar");
 
 
 %%
@@ -408,31 +419,38 @@ save Data/paramDists.mat paramDists;
 % Run second MCMC
 lb2 = [1e8, 2e9, -1e8, -1e8, -1e8, -1e8];
 ub2 = [3e10, 2e10, 0, 0, 0, 0];
-ntrials2 = 1e6;
+ntrials2 = 1e5;
 runMCMC = false;
 % x_guess = [4e9, 3e9, optParams(1), optParams(2), optParams(13), optParams(14)];
 if(runMCMC)
     [optParams2, posterior2, L_keep2, ~, ~, ~] = optimize_SC_MCMC(optimizedM, lb2, ub2, xopt, ...
                 yopt, zopt, u1d', insarx, insary, insaru_full', look, insar_lengths, sparse(cinv_full), daily_inv_std, ...
-                nanstatend, ntrials2, gps_weight, 5.3e2, paramNames2, burn, true, saveFigs); % subsample set to true
-    save Data/MCMC2_1e6_vol_inversion.mat optParams2 posterior2 L_keep2;
+                nanstatend, ntrials2, 30, 200, paramNames2, burn, true, false, saveFigs); % subsample set to true
+    save Data/MCMC2_1e5_dVinversion_gps15_prior100.mat optParams2 posterior2 L_keep2;
 else
     load Data/MCMC2_1e6_vol_inversion.mat
 end
 % Adjust optimizedM to reflect the new calc volume + volume change
-HMM_AR = optimizedM(1)/optimizedM(2);
-HMM_volume = optParams2(1);
-vert_sd = (3/(4*pi) * HMM_volume * (HMM_AR^2))^(1/3);
-horiz_sd = vert_sd/(HMM_AR);
-optimizedM(1:2) = [vert_sd, horiz_sd];
+% HMM_AR = optimizedM(1)/optimizedM(2);
+% HMM_volume = optParams2(1);
+% vert_sd = (3/(4*pi) * HMM_volume * (HMM_AR^2))^(1/3);
+% horiz_sd = vert_sd/(HMM_AR);
+% optimizedM(1:2) = [vert_sd, horiz_sd];
+% 
+% SC_AR = optimizedM(9)/optimizedM(10);
+% SC_volume = optParams2(2);
+% vert_sd = (3/(4*pi) * SC_volume * (SC_AR^2))^(1/3);
+% horiz_sd = vert_sd/(SC_AR);
+% optimizedM(9:10) = [vert_sd, horiz_sd];
 
-SC_AR = optimizedM(9)/optimizedM(10);
-SC_volume = optParams2(2);
-vert_sd = (3/(4*pi) * SC_volume * (SC_AR^2))^(1/3);
-horiz_sd = vert_sd/(SC_AR);
-optimizedM(9:10) = [vert_sd, horiz_sd];
+optimizedM = get_full_m(optimizedM, optParams2, true, "insar", true);
 
-optimizedM(8) = optParams2(3); optimizedM(16) = optParams2(5);
+%% Test diff optimizedM
+% optParams1(1) = 1e3;
+% optParams2(2) = 20e9;
+% optParams2(5) = -3e7;
+% optParams2(3) = 1;
+% optimizedM = get_full_m(optimizedM, optParams2, true, "insar", true);
 
 %% New histogram plotting
 paramNames3 = {'dpHMM_insar', 'dpHMM_gps', 'dpSC_insar', 'dpSC_gps'};
@@ -458,7 +476,7 @@ for i = 1:4
     pressure_samples(i,pressure_samples(i,:) < -50e6) = nan;
     optParams3(i) = spheroid_pFromV([optimizedM(1:7), optParams2(i+2)],0.25, 3.08*10^9,'volume');
 end
-optimizedM(8) = optParams3(2); optimizedM(16) = optParams2(5);
+% optimizedM(8) = optParams3(2); optimizedM(16) = optParams2(5);
 % Define the full list of parameters to plot in order (4x4 grid)
 finalParamNames = { ...
   '$\Delta V_{\mathrm{HMM}}^{\mathrm{InSAR}}$', '$\Delta V_{\mathrm{HMM}}^{\mathrm{GPS}}$', '$V_{\mathrm{HMM}}$', '$x_{\mathrm{HMM}}$', ...
@@ -483,6 +501,7 @@ sourceMap = [ ...
     1, 8;  1, 9;  1, 10; 1, 11; ... % Row 3
     1, 12; 2, 5;  2, 6;  2, 2  ... % Row 4
 ];
+
 
 % 1 = paramNames, 2 = paramNames2, 3 = paramNames3 (pressures)
 
@@ -714,7 +733,7 @@ dp(:, 1) = fillmissing(dp(:, 1), "makima", 1);
 
 %% Error analysis
 
-N_draws = 10;
+N_draws = 25;
 N_noise = 5;
 
 disp("Getting errors...")
@@ -804,13 +823,13 @@ insarmode = "asc";
 % make predicted insar data
 if(insarmode == "asc")
     ind = (insar_lengths(1) + 1):sum(insar_lengths);
-    insaru_pred = real(spheroid(optimizedM(1:8), [insarx(ind); insary(ind); zeros(size(insarx(ind)))], 0.25, 3.08*10^9) + ...
-        spheroid(optimizedM(9:end), [insarx(ind); insary(ind); zeros(size(insarx(ind)))], 0.25, 3.08*10^9));
+    insaru_pred = real(spheroid(optimizedM(1:8), [insarx(ind); insary(ind); zeros(size(insarx(ind)))], 0.25, 3.08*10^9, 'volume') + ...
+        spheroid(optimizedM(9:end), [insarx(ind); insary(ind); zeros(size(insarx(ind)))], 0.25, 3.08*10^9, 'volume'));
     insaru_pred = insaru_pred' * look(:,2);
 else
     ind = 1:(insar_lengths(1));
-    insaru_pred = real(spheroid(optimizedM(1:8), [insarx(ind); insary(ind); zeros(size(insarx(ind)))], 0.25, 3.08*10^9) + ...
-        spheroid(optimizedM(9:end), [insarx(ind); insary(ind); zeros(size(insarx(ind)))], 0.25, 3.08*10^9));
+    insaru_pred = real(spheroid(optimizedM(1:8), [insarx(ind); insary(ind); zeros(size(insarx(ind)))], 0.25, 3.08*10^9, 'volume') + ...
+        spheroid(optimizedM(9:end), [insarx(ind); insary(ind); zeros(size(insarx(ind)))], 0.25, 3.08*10^9, 'volume'));
     insaru_pred = insaru_pred' * look(:,1);
 end
 
@@ -822,6 +841,6 @@ xon = true; yon = false;
 % Set if colorbar is on
 con = true;
 
-plot_insar_new(insarx(ind), insary(ind), insaru_pred', block_size(ind), look, x, y, u1d, u1d, xon, yon, con, ...
+plot_insar_new(insarx(ind), insary(ind), insaru_full(ind) - insaru_pred', block_size(ind), look, x, y, u1d, u1d, xon, yon, con, ...
     31, GPSNameList, optimizedM, coast_new,cLimits, opacity, saveFigs, insarmode);
 %  - insaru_pred' insaru_full(ind)

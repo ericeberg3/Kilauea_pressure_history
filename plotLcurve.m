@@ -21,7 +21,7 @@ function plotLcurve(l_curve_points, l_curve_type, prior_weights, gps_weights)
     % Choose colormap and add colorbar
     
     if(l_curve_type == "prior")
-        scatter_handle = scatter(xl(:), yl(:), 400, prior_weights(:), 'filled');
+        scatter_handle = scatter(xl(:), yl(:), 400, prior_weights(1:length(xl)), 'filled');
         colormap(parula);
         c = colorbar;
         c.Label.String = 'Prior Weight';

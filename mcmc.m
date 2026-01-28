@@ -1,5 +1,5 @@
-function  [x_keep, L_keep, count, gps_l2, insar_l2, prior_l2] = mcmc(func,data,x0,xstep,xbnds,sigma,cinv_full,Niter, ...
-    gps_weighting,prior_weight,priorNames,burn,varargin)
+function  [x_keep, L_keep, count, gps_l2, insar_l2, prior_l2, weights] = mcmc(func,data,x0,xstep,xbnds,sigma,cinv_full,Niter, ...
+    gps_weighting,insar_weight,priorNames,burn,solveweights, varargin)
 %
 % [x_keep, L_keep, count] = mcmc(func,data,x0,xstep,sigma,Niter,varargin)
 %
@@ -22,6 +22,8 @@ function  [x_keep, L_keep, count, gps_l2, insar_l2, prior_l2] = mcmc(func,data,x
 %       count  = number of accepted. Acceptance ratio is count/Niter
 %
 %  P Segall: 2012
+
+weights = zeros(2, Niter);
 
 fun = fcnchk(func);
 load Data/paramDists.mat paramDists;
@@ -48,11 +50,18 @@ L_scaling = (1/length(data)) * 0.5;
 L_gps = -0.5 * sum(((data(1:N_gps) - dprop(1:N_gps))./sigma(1:N_gps)).^2);
 L_insar = -0.5 * (data(N_gps+1:end) - dprop(N_gps+1:end))' * cinv_full * (data(N_gps+1:end) - dprop(N_gps+1:end));
 prior_prob = 0;
-for j = 1:numel(priorNames)
-    name = priorNames{j};
-    prior_prob = prior_prob + log(pdf(paramDists.(name).dist, x(j)));
+if(~solveweights)
+    for j = 1:numel(priorNames)
+        name = priorNames{j};
+        prior_prob = prior_prob + log(pdf(paramDists.(name).dist, x(j)));
+    end
+else
+    for j = 1:numel(priorNames)-2
+        name = priorNames{j};
+        prior_prob = prior_prob + log(pdf(paramDists.(name).dist, x(j)));
+    end
 end
-L = L_scaling * (L_gps*gps_weighting + L_insar + prior_weight*prior_prob);
+L = L_scaling * (L_gps*gps_weighting + L_insar + insar_weight*prior_prob);
 barLength = 25;
 prevStr = '';
 
@@ -89,8 +98,21 @@ for k=1:Niter
     if all(xprop > xbnds(:,1)') && all(xprop < xbnds(:,2)')
         % && xprop(2) < xprop(1) && xprop(end) < xprop(end-1) % GPS pressure < insar pressure
         
-        % prediction
-        dprop = real(fun(xprop, varargin{:}));
+        
+
+        if(solveweights)
+            log_gamma_gps = xprop(end-1);
+            log_gamma_insar = xprop(end);
+            gamma_gps = 10^(log_gamma_gps);
+            gamma_insar = 10^(log_gamma_insar);
+            % prediction
+            dprop = real(fun(xprop(1:end-2), varargin{:}));
+
+            r_gps = data(1:N_gps) - dprop(1:N_gps);
+            r_insar = data(N_gps+1:end) - dprop(N_gps+1:end);
+        else
+            dprop = real(fun(xprop, varargin{:}));
+        end
         
         % likelihood
         % Lprop = prod(normpdf( data-dprop, 0, sigma));
@@ -102,16 +124,31 @@ for k=1:Niter
         % Try MC hammer algorithm to parallelize 
         % Should be running 1M simulations
         prior_prob = 0;
-        for j = 1:numel(priorNames)
-            name = priorNames{j};
-            prior_prob = prior_prob + log(pdf(paramDists.(name).dist, xprop(j)));
+        if(~solveweights)
+            for j = 1:numel(priorNames)
+                name = priorNames{j};
+                prior_prob = prior_prob + log(pdf(paramDists.(name).dist, x(j)));
+            end
+        else
+            for j = 1:numel(priorNames)-2
+                name = priorNames{j};
+                prior_prob = prior_prob + log(pdf(paramDists.(name).dist, x(j)));
+            end
+        end
+        
+        if(solveweights)
+            phi_gps = sum((r_gps ./ sigma(1:N_gps)).^2); % The raw misfit
+            L_gps = -0.5 * (1/gamma_gps^2) * phi_gps - N_gps * log(gamma_gps);
+            phi_insar = r_insar' * cinv_full * r_insar; % The raw misfit
+            L_insar = -0.5 * (1/gamma_insar^2) * phi_insar - N_insar * log(gamma_insar);
+
+            weights(1,k) = gamma_gps; weights(2,k) = gamma_insar;
+        else
+            L_gps = -0.5 * sum(((data(1:N_gps) - dprop(1:N_gps))./sigma(1:N_gps)).^2);
+            L_insar = -0.5 * (data(N_gps+1:end) - dprop(N_gps+1:end))' * cinv_full * (data(N_gps+1:end) - dprop(N_gps+1:end));
         end
 
-
-        L_gps = -0.5 * sum(((data(1:N_gps) - dprop(1:N_gps))./sigma(1:N_gps)).^2);
-        L_insar = -0.5 * (data(N_gps+1:end) - dprop(N_gps+1:end))' * cinv_full * (data(N_gps+1:end) - dprop(N_gps+1:end));
-
-        Lprop = L_scaling * (L_gps*gps_weighting + L_insar + prior_weight*prior_prob);
+        Lprop = L_scaling * (L_gps*gps_weighting + L_insar + prior_prob*insar_weight);
 
         u=rand(1,1);
 
@@ -176,9 +213,16 @@ dprop = fun(optParams', varargin{:});
 gps_l2 = sum(((data(1:N_gps) - dprop(1:N_gps))./sigma(1:N_gps)).^2);
 insar_l2 = (data(N_gps+1:end) - dprop(N_gps+1:end))' * cinv_full * (data(N_gps+1:end) - dprop(N_gps+1:end));
 prior_l2 = 0;
-for j = 1:numel(priorNames)
-    name = priorNames{j};
-    prior_l2 = prior_l2 + log(pdf(paramDists.(name).dist, optParams(j)));
+if(~solveweights)
+    for j = 1:numel(priorNames)
+        name = priorNames{j};
+        prior_l2 = prior_l2 + log(pdf(paramDists.(name).dist, x(j)));
+    end
+else
+    for j = 1:numel(priorNames)-2
+        name = priorNames{j};
+        prior_l2 = prior_l2 + log(pdf(paramDists.(name).dist, x(j)));
+    end
 end
 
 end

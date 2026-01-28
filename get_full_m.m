@@ -46,7 +46,7 @@ function m = get_full_m(prior, opt_params, forward, pressure_type, varargin)
             SC_volume = 3e9; % opt_params(end);
             opt_vert_sd = (3/(4*pi) * SC_volume * (aspect_ratio_SC^2))^(1/3);
             opt_horiz_sd = opt_vert_sd/(aspect_ratio_SC);
-            mSC = [opt_vert_sd, opt_horiz_sd, opt_params(10:11), opt_params(6:8), opt_params(13)];
+            mSC = [opt_vert_sd, opt_horiz_sd, opt_params(10:11), opt_params(6:8), opt_params(12)];
             
             % Full output geometry vector containing both HMM and SC
             m = real([mHMM, mSC]);
