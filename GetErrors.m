@@ -1,7 +1,7 @@
-function [dp_low, dp_high, u_high, u_low] = GetErrors(N_draws, N_noise, posterior, posterior2, posterior3, ...
+function [dp_low, dp_high, u_high, u_low] = GetErrors(N_draws, N_noise, posterior, ...
     paramDists, ntime, ux, uy, uz, tiltx, tilty, ...
     dispstd, GPSNameList, rw_stddev, dp_weight, taiyi_parameters, ...
-    npitloc, gps_sigma, nanstatbeginning, paramNames, paramNames2, paramNames3, optimizedM)
+    npitloc, gps_sigma, nanstatbeginning, paramNames, optimizedM)
 %% First construct the covariance matrices to generate added nosie
 %%% Delete dp, optimizedM when it works
 N = length(tiltx);          % number of measurements
@@ -23,20 +23,10 @@ full_posterior = zeros(length(full_param_names), N_draws);
 
 % populate the posterior distribution with each relevant metric
 for i = 1:size(full_posterior, 1)
-    idx1 = find(strcmp(full_param_names{i}, paramNames));
-    idx2 = find(strcmp(full_param_names{i}, paramNames2));
-    idx3 = find(strcmp(full_param_names{i}, paramNames3));
-    if ~isempty(idx3)
-        temp_post = posterior3(idx3, :);
-        temp_post = temp_post(~isnan(temp_post));
-        rand_cols = randi(size(temp_post, 2), 1, N_draws);
-        full_posterior(i, :) = temp_post(rand_cols);
-    elseif ~isempty(idx2)
-        rand_cols = randi(size(posterior2, 2), 1, N_draws);
-        full_posterior(i, :) = posterior2(idx2, rand_cols);
-    elseif ~isempty(idx1)
+    idx = find(strcmp(full_param_names{i}, paramNames));
+    if(~isempty(idx))
         rand_cols = randi(size(posterior, 2), 1, N_draws);
-        full_posterior(i, :) = posterior(idx1, rand_cols);
+        full_posterior(i, :) = posterior(idx, rand_cols);
     else
         % xlims = paramDists.(full_param_names{i}).xlim;
         % xsamples = linspace(xlims(1), xlims(2), length(posterior));

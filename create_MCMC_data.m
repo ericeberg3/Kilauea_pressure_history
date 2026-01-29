@@ -1,5 +1,5 @@
 function data = create_MCMC_data(m, m_guess, x, y, z, insarx, insary, ...
-    look, insar_lengths, nanstatsbeg, second_run)
+    look, insar_lengths, nanstatsbeg)
 
     npitloc = coord('NPIT', 'llh');
     npitloc = llh2local(npitloc(1:2), [-155.2784, 19.4073]) * 1000;
@@ -9,7 +9,7 @@ function data = create_MCMC_data(m, m_guess, x, y, z, insarx, insary, ...
     % opt_horiz_sd = opt_vert_sd/(aspect_ratio);
     
     % Create m based on the gps pressure change
-    m_full = get_full_m(m_guess, m, true, "gps", second_run);
+    m_full = get_full_m(m_guess, m, true, "gps");
     mHMM = m_full(1:8);
     mSC = m_full(9:end);
     
@@ -38,7 +38,7 @@ function data = create_MCMC_data(m, m_guess, x, y, z, insarx, insary, ...
     GPS_data = gtot(:);
 
     % Create m based on the insar pressure change
-    m_full = get_full_m(m_guess, m, true, "insar", second_run);
+    m_full = get_full_m(m_guess, m, true, "insar");
     mHMM = m_full(1:8);
     mSC = m_full(9:end);
 

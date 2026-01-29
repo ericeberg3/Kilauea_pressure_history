@@ -1,21 +1,19 @@
 function [optParams, posterior, L_keep, gps_l2, insar_l2, prior_l2, weights] = optimize_SC_MCMC(m_known, ...
      lb, ub, xopt, yopt, zopt, u1d, ...
      insarx, insary, insaru, look, insar_lengths, cinv_full, invStdPWRL, nanstatbeginning, ...
-     ntrials, gps_weight, insar_weight, paramNames, burn, second_run, solveweights, saveFigs)
+     ntrials, gps_weight, insar_weight, prior_weight, paramNames, burn, solveweights, saveFigs)
 
 GPS_std = 1./invStdPWRL;
 priormeans = get_full_m(m_known, [], false, "insar");
-if(second_run)
-    priormeans = get_full_m(m_known, [], false, "insar", second_run);
-    priormeans(1:2) = [4e9, 3e9];
-elseif(solveweights)
+
+if(solveweights)
     % Set up weighting scheme
     paramNames = [paramNames, "log_gamma_GPS", "log_gamma_InSAR"];
-    gamma_gps_init = log10(gps_weight); % 67
-    gamma_insar_init = log10(insar_weight); % 530
+    gamma_gps_init = gps_weight; % 67
+    gamma_insar_init = insar_weight; % 530
     priormeans = [priormeans, gamma_gps_init, gamma_insar_init];
     lb = [lb, -3, -3];
-    ub = [ub, 1, 1];
+    ub = [ub, 3, 3];
 end
 out_of_bnds = priormeans > ub | priormeans < lb;
 if(any(out_of_bnds)); error("Initial guess is not within bounds index " + strjoin(string(find(out_of_bnds)), ', ')); end
@@ -26,19 +24,19 @@ bnds = [lb; ub]';
 sigma = ones(size([u1d(:)])); % Insar stddev ~0.2m
 % sigma = ones(size(insaru));
 for i = 1:length(u1d(:))
-    sigma(i) = GPS_std(ceil(i / size(u1d, 2)));
+    sigma(i) = GPS_std(mod(i - 1, 3) + 1);
 end
 
 % [u1d(:);insaru]
 % xstep = 0.02*ones(1,6); % 0.02
 % xstep(4) = 0.007; % horiz semi-diam 
 
-xstep = 1.4e-1*ones(1,size(bnds,1)); % 2.5e-2
-if(~second_run && solveweights); xstep(end-1:end) = 0.05; end
+xstep = 2.5e-1*ones(1,size(bnds,1)); % 2.5e-2
+if(solveweights); xstep(end-1:end) = 0.03; end
 
 [x_keep, L_keep, count, gps_l2, insar_l2, prior_l2, weights] = mcmc('create_MCMC_data',[u1d(:);insaru(:)],priormeans,xstep, ...
-    bnds, sigma, cinv_full, ntrials, gps_weight, insar_weight, paramNames, burn, solveweights, ...
-    m_known, xopt, yopt, zopt, insarx, insary, look, insar_lengths, nanstatbeginning, second_run);
+    bnds, sigma, cinv_full, ntrials, gps_weight, insar_weight, prior_weight, paramNames, burn, solveweights, ...
+    m_known, xopt, yopt, zopt, insarx, insary, look, insar_lengths, nanstatbeginning);
 
 % burn = 4e3;
 

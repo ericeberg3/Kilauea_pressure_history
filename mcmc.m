@@ -1,5 +1,5 @@
 function  [x_keep, L_keep, count, gps_l2, insar_l2, prior_l2, weights] = mcmc(func,data,x0,xstep,xbnds,sigma,cinv_full,Niter, ...
-    gps_weighting,insar_weight,priorNames,burn,solveweights, varargin)
+    gps_weight,insar_weight,prior_weight, priorNames,burn,solveweights, varargin)
 %
 % [x_keep, L_keep, count] = mcmc(func,data,x0,xstep,sigma,Niter,varargin)
 %
@@ -23,8 +23,6 @@ function  [x_keep, L_keep, count, gps_l2, insar_l2, prior_l2, weights] = mcmc(fu
 %
 %  P Segall: 2012
 
-weights = zeros(2, Niter);
-
 fun = fcnchk(func);
 load Data/paramDists.mat paramDists;
 % fun = str2func(func);
@@ -39,14 +37,15 @@ end
 % TODO could check that x0 lies within bounds
 
 x_keep=zeros(Nparams,Niter); 
-L_keep=zeros(1,Niter); 
+L_keep=zeros(1,Niter);
+weights = zeros(2, Niter);
 N_gps = length(varargin{3})*3;
 N_insar = length(varargin{6});
 
 x = x0;
 % prior_weight = 0*5e2;
 dprop = fun(x, varargin{:});
-L_scaling = (1/length(data)) * 0.5;
+L_scaling = (1/length(data)) * 1;
 
 L_gps = -0.5 * sum(((data(1:N_gps) - dprop(1:N_gps))./sigma(1:N_gps)).^2);
 L_insar = -0.5 * (data(N_gps+1:end) - dprop(N_gps+1:end))' * cinv_full * (data(N_gps+1:end) - dprop(N_gps+1:end));
@@ -61,8 +60,9 @@ else
         name = priorNames{j};
         prior_prob = prior_prob + log(pdf(paramDists.(name).dist, x(j)));
     end
+    L_prior = prior_prob;
 end
-L = L_scaling * (L_gps*gps_weighting + L_insar + insar_weight*prior_prob);
+L = L_scaling * (L_gps*10^gps_weight + 10^insar_weight * L_insar + L_prior);
 barLength = 25;
 prevStr = '';
 
@@ -85,6 +85,10 @@ accCount   = 0;
 % Set step for negative values to be lower bounds:
 % xstep(1) = xbnds(1,1) * xstep_int(1); % dpHMM
 % xstep(4) = xbnds(4,1) * xstep_int(4); % dpSC
+if(solveweights)
+    log_gamma_gps = x(end-1);
+    log_gamma_insar = x(end);
+end
 
 for k=1:Niter
     % generate proposal
@@ -100,16 +104,13 @@ for k=1:Niter
     % check bounds
     if all(xprop > xbnds(:,1)') && all(xprop < xbnds(:,2)')
         % && xprop(2) < xprop(1) && xprop(end) < xprop(end-1) % GPS pressure < insar pressure
-        
-        
-
         if(solveweights)
             log_gamma_gps = xprop(end-1);
             log_gamma_insar = xprop(end);
             gamma_gps = 10^(log_gamma_gps);
             gamma_insar = 10^(log_gamma_insar);
             % prediction
-            dprop = real(fun(xprop(1:end-2), varargin{:}));
+            dprop = real(fun(xprop(1:end-1), varargin{:}));
 
             r_gps = data(1:N_gps) - dprop(1:N_gps);
             r_insar = data(N_gps+1:end) - dprop(N_gps+1:end);
@@ -136,7 +137,9 @@ for k=1:Niter
             for j = 1:numel(priorNames)-2
                 name = priorNames{j};
                 prior_prob = prior_prob + log(pdf(paramDists.(name).dist, x(j)));
+                % L_prior = - ((numel(priorNames)-3)/2) * log(gamma_prior^2) + (gamma_prior * prior_prob);
             end
+            L_prior = prior_prob;
         end
         
         if(solveweights)
@@ -145,13 +148,19 @@ for k=1:Niter
             phi_insar = r_insar' * cinv_full * r_insar; % The raw misfit
             L_insar = -0.5 * (1/gamma_insar^2) * phi_insar - N_insar * log(gamma_insar);
 
-            weights(1,k) = gamma_gps; weights(2,k) = gamma_insar;
+            wrms_gps = sqrt(phi_gps / (N_gps * gamma_gps^2));
+            wrms_insar = sqrt(phi_insar / (N_insar * gamma_insar^2));
+
+            weights(1,k) = log_gamma_gps; weights(2,k) = log_gamma_insar;
         else
             L_gps = -0.5 * sum(((data(1:N_gps) - dprop(1:N_gps))./sigma(1:N_gps)).^2);
             L_insar = -0.5 * (data(N_gps+1:end) - dprop(N_gps+1:end))' * cinv_full * (data(N_gps+1:end) - dprop(N_gps+1:end));
         end
+        % if(mod(k, Niter/8) == 1)
+        %     disp("L_gps/L_insar = " + string(L_gps/L_insar) + ", L_prior/L_insar = " + string(L_prior/L_insar))
+        % end
 
-        Lprop = L_scaling * (L_gps*gps_weighting + L_insar + prior_prob*insar_weight);
+        Lprop = L_scaling * (L_gps + L_insar + L_prior);
 
         u=rand(1,1);
 
@@ -166,6 +175,8 @@ for k=1:Niter
 
     x_keep(:,k) = x;
     L_keep(k) = L;
+    weights(1,k) = log_gamma_gps;
+    weights(2,k) = log_gamma_insar;
 
     % if k > 500          % first 500 steps = burn‑in, no adaptation
     %     alpha = 1/(k-500);  % Robbins‑Monro weight
@@ -184,17 +195,18 @@ for k=1:Niter
         acc_ratio = count/k;
         numEquals = round(percent * barLength);
         bar = [repmat('=', 1, numEquals) repmat(' ', 1, barLength - numEquals)];
-        progressStr = sprintf('[%s] %3.1f%%', bar, acc_ratio*100);
-        
+        progressStr = sprintf('[%s] %3.1f%% | WRMS G:%.2f I:%.2f | Lg/Li: %.2f Lp/Li: %.2f', bar, ...
+            acc_ratio*100, wrms_gps, wrms_insar, L_gps/L_insar, L_prior/L_insar);
+
         % Erase the previous progress bar
         if ~isempty(prevStr)
             fprintf(repmat('\b', 1, length(prevStr)));
         end
-        
+
         % Print the new progress bar and store the string for the next iteration
         fprintf('%s', progressStr);
         prevStr = progressStr;
-        
+
         drawnow;  % force the update
     end
 end

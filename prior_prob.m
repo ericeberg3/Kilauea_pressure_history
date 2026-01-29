@@ -21,6 +21,10 @@ params = [ ...
     struct('file','Data/post_im/alpha_sc.png', 'name','dpSC_insar',  'xlim',[-1e8 1e8]); ...
     struct('file','Data/post_im/alpha_sc.png', 'name','dpSC_gps',  'xlim',[-1e8 1e8]); ...
     struct('file','Data/post_im/alpha_sc.png', 'name','volSC',  'xlim',[2e9 20e9]); ...
+    struct('file','Data/post_im/alpha_sc.png', 'name','dvHMM_gps',  'xlim',[-1e10 1e10]); ...
+    struct('file','Data/post_im/alpha_sc.png', 'name','dvHMM_insar',  'xlim',[-1e10 1e10]); ...
+    struct('file','Data/post_im/alpha_sc.png', 'name','dvSC_gps',  'xlim',[-1e10 1e10]); ...
+    struct('file','Data/post_im/alpha_sc.png', 'name','dvSC_insar',  'xlim',[-1e10 1e10]); ...
     struct('file','Data/post_im/mu.png', 'name','mu', 'xlim',[8.5, 11]) % note units of log10(Pa)
 ];
 
@@ -113,23 +117,36 @@ for p=1:nP
         fprintf('volHMM → Gamma  k=%.3f  θ=%.3f  (mode=%.3f)\n', ...
                 k,th,(k-1)*th );
     end
-
-
+    
+    % dpSC has a uniform distribution
     if strcmp(params(p).name,'dpSC_insar') | strcmp(params(p).name,'dpSC_gps')
         a = -1e8;
         b = 1e8;
         dist = makedist('Uniform','lower',a,'upper',b);
     end
-    
-    % Estimated dpHMM prior to get ~3 MPa in the correct time period
-    if strcmp(params(p).name,'dpHMM_insar')
-         dist = makedist('Normal','mu',-22e6,'sigma',5e6);
-    end
-    if strcmp(params(p).name,'dpHMM_gps')
-         dist = makedist('Normal','mu',-10e6,'sigma',5e6);
+    % all volume changes have a uniform distribution
+    if strcmp(params(p).name,'dvHMM_insar') | strcmp(params(p).name,'dvHMM_gps') | ...
+        strcmp(params(p).name,'dvSC_insar') | strcmp(params(p).name,'dvSC_gps')
+        a = -1e10;
+        b = 1e10;
+        dist = makedist('Uniform','lower',a,'upper',b);
     end
 
-    % Estimate the SC volume prior as a gaussian around 2.5 km^3
+    % Estimated dpHMM prior to get ~3 MPa in the correct time period
+    if strcmp(params(p).name,'dpHMM_insar')
+         % dist = makedist('Normal','mu',-22e6,'sigma',5e6);
+        a = -1e8;
+        b = 1e8;
+        dist = makedist('Uniform','lower',a,'upper',b);
+    end
+    if strcmp(params(p).name,'dpHMM_gps')
+         % dist = makedist('Normal','mu',-10e6,'sigma',5e6);
+        a = -1e8;
+        b = 1e8;
+        dist = makedist('Uniform','lower',a,'upper',b);
+    end
+
+    % Estimate the SC volume prior as a uniform distribution around 2.5 km^3
     if strcmp(params(p).name,'volSC')
         dist = makedist('Uniform','lower',2.0e9, 'upper', 20e9);
     end
