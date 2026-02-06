@@ -287,7 +287,7 @@ delete(gcp('nocreate'));
 % --- Set if we want to run MCMC, plot the L curve, and the type of L curve
 % to create --- %
 solveweights = false;
-runMCMC = true;
+runMCMC = false;
 run_L_curve = false;
 l_curve_type = "gps"; % 'prior' to test prior weights, 'gps' to test gps weights
 % for l_curve_type = ["prior", "gps"]
@@ -340,7 +340,7 @@ for i = 1:n_l_curve
             % plotLcurve(l_curve_points, l_curve_type, dynamic_prior_weights, dynamic_gps_weights);
         end
     else
-        % load Data/MCMC_vars_1e6_allparams_nodpineq.mat;
+        load Data/MCMC_final_1e6_dv_gps2e2_insar1e3.mat;
         % load Data/MCMC_1e6_SCvol_topbnd.mat;
         % load Data/MCMC_1e6_vol_gps60_prior200.mat;
         [~, ind] = max(L_keep);
@@ -350,12 +350,6 @@ for i = 1:n_l_curve
     toc;
 end
 
-
-% figure(1); clf;
-% subplot(1,2,1); histogram(weights(1,burn:end)); title("GPS weight"); xline(opt_weights(1));
-% subplot(1,2,2); histogram(weights(2,burn:end)); title("InSAR weight"); xline(opt_weights(2));
-
-%%
 % Get the full geometry parameters based on the optimization results:
 % Save and plot l curve data
 if(run_L_curve)
@@ -380,17 +374,38 @@ if(run_L_curve)
 end
 % end
 %%
+optimizedM = get_full_m(taiyi_parameters, optParams', true, "insar");
 % Get the full geometry parameters based on the optimization results:
 % disp("GPS L2: " + gps_l2 + " InSAR L2: " + insar_l2);
+
+% Subsample all geometries for dpHMM_gps < -10MPa
 subsample = true;
 if(subsample)
+    HMM_p_factor = zeros(1, length(posterior));
+    for i = 1:length(posterior)
+        post_samp = posterior(:,i)';
+        m_tmp = get_full_m(taiyi_parameters, post_samp, true, "insar");
+        m_tmp(8) = 1;
+        HMM_p_factor(i) = (spheroid_pFromV(m_tmp(1:8), 0.25, 3.08*10^9, 'volume'));
+    end
     
-    [~, ind] = max(L_keep);
-    optParams = posterior(:, ind);
+    dpHMM_gps = posterior(2,:).*HMM_p_factor;
+    dpHMM_insar = posterior(1,:).*HMM_p_factor;
+    dp_posterior = posterior; dp_posterior(1,:) = dpHMM_insar; dp_posterior(2,:) = dpHMM_gps;
 
-optimizedM = get_full_m(taiyi_parameters, optParams', true, "insar");
+    subsamp_inds = dp_posterior(2,:) > -10e6;
+    [~, ind] = max(L_keep(subsamp_inds));
+    subsamp_posterior = posterior(:, subsamp_inds);
+    subsamp_posterior(1:2, :) = dp_posterior(1:2, subsamp_inds);
+    optParams_subsamp = subsamp_posterior(:, ind);
+end
+%%
+lb_new = lb; 
+ub_new = ub;
 
-
+plotHists(subsamp_posterior, optParams_subsamp, lb_new, ub_new, paramNames, saveFigs)
+posterior = subsamp_posterior;
+optParams = optParams_subsamp';
 
 %%
 % Show parameter table
@@ -398,104 +413,8 @@ disp(array2table(optParams(:).', 'VariableNames',paramNames));
 % Make sure parameters are real
 optParams = real(optParams);
 
-%% Test diff optimizedM
-% optParams1(1) = 1e3;
-% optParams2(2) = 20e9;
-% optParams2(5) = -3e7;
-% optParams2(3) = 1;
-% optimizedM = get_full_m(optimizedM, optParams2, true, "insar", true);
-figure(1); clf;
-for i = 1:16
-    subplot(4, 4, i);
-    plot(posterior(i, :))
-    title(paramNames{i})
-end
-
-%% Plot histogram of each parameter
-plotParamNames = {
-  '$\Delta V_{\mathrm{HMM}}^{\mathrm{InSAR}}\ (\mathrm{MPa})$', ...
-  '$\Delta V_{\mathrm{HMM}}^{\mathrm{GPS}}\ (\mathrm{MPa})$', ...
-  '$V_{\mathrm{HMM}}\ (\mathrm{km}^3)$', ...
-  '$x_{\mathrm{HMM}}\ (\mathrm{km})$', ...
-  '$y_{\mathrm{HMM}}\ (\mathrm{km})$', ...
-  '$d_{\mathrm{HMM}}\ (\mathrm{km})$', ...
-  '$\alpha_{\mathrm{HMM}}$', ...
-  '$x_{\mathrm{SC}}\ (\mathrm{km})$', ...
-  '$y_{\mathrm{SC}}\ (\mathrm{km})$', ...
-  '$d_{\mathrm{SC}}\ (\mathrm{km})$', ...
-  '$\alpha_{\mathrm{SC}}$', ...
-  '$\phi_{\mathrm{SC}}\ (^\circ)$', ...
-  '$\psi_{\mathrm{SC}}\ (^\circ)$', ...
-  '$\Delta V_{\mathrm{SC}}^{\mathrm{InSAR}}\ (\mathrm{MPa})$', ...
-  '$\Delta V_{\mathrm{SC}}^{\mathrm{GPS}}\ (\mathrm{MPa})$', ...
-  '$V_{\mathrm{SC}}\ (\mathrm{km}^3)$',
-};
-
-load Data/paramDists.mat;
-
-% Scale units to appropriate factor
-unitScaling = [1e-9, 1e-9, 1e-9, 1e-3, 1e-3, 1e-3, 1, ...
-    1e-3, 1e-3, 1e-3, 1, 1, 1, 1e-9, 1e-9, 1e-9];
-
-histlims = [-50, 0; -40, 0; 0, 20; -0.1, 0.2; 0, 0.4; -1.5, -0.75; 1.3, 1.8; ...
-    0, 2; -2.8, -2.0; -4.5, -3; 0.1, 0.6; 50, 80; 100, 180; -40, 0; -40, 0; 2, 15];
-
-figure(5); clf;
-tl = tiledlayout(4,4,'Padding','compact', 'TileSpacing','compact');
-
-for i = 1:16
-    ax = nexttile;
-    
-    % Retrieve data based on source map
-    data = posterior(i, :); % From Calculated Pressures
-    priorName = paramNames{i};
-    mle = optParams(i);
-    lb_chosen = lb(i);
-    ub_chosen = ub(i);
-
-    % Create Histogram
-    s = unitScaling(i);
-    [counts, edges] = histcounts(data(~isnan(data)), 50, 'Normalization', 'pdf');
-    binCenters = (edges(1:end-1) + diff(edges)/2) * s;
-    counts = counts / s;
-    
-    % Plot Posterior
-    hPost = plot(binCenters, counts, 'Color',[0 0.4470 0.7410], 'LineWidth', 3);
-    hold on;
-    
-    % Plot MLE / Mean (For pressure/vol, use mean of samples; for geom use optParams)
-    val_mle = optParams(i) * s;
-    xline(mle*s, '--r', 'LineWidth', 2);
-    
-    % Plot Priors
-    % Extend prior beyond posterior range by 10% each side
-    span = edges(end) - edges(1);
-    xGrid = linspace(lb_chosen, ub_chosen, 400)';
-    name = plotParamNames{i};
-    p_prior = pdf(paramDists.(priorName).dist, xGrid);
-    
-    % Rescale prior 
-    xGrid = xGrid * s;
-    p_prior = p_prior / s;
-    
-    % Prior PDF in dark gray dashed 
-    % if(i ~= 14 && i ~= 15 && i ~= 16)
-        hPrior = plot(xGrid, p_prior, '--', 'Color',[0.3 0.3 0.3], 'LineWidth',2.5);
-    % end
-
-    xlim([lb_chosen * s, ub_chosen * s]);
-    % Formatting
-    grid on;
-    title(name, 'Interpreter','latex', 'FontSize', 16);
-    axis square;
-    
-    % Print CI stats
-    ci = prctile(data, [5 95]) * s;
-    fprintf('%s: 90%% CI [%.2f, %.2f]\n', name, ci(1), ci(2));
-end
-
-% Add Legend
-if saveFigs; exportgraphics(tl, './PaperFigs/combined_hist.png', 'Resolution', 300); end
+plotHists(posterior, optParams, lb, ub, paramNames, saveFigs)
+optimizedM = get_full_m(taiyi_parameters, optParams, true, "insar");
 
 
 %% Plot correlation btwn parameters

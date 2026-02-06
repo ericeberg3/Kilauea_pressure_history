@@ -497,10 +497,10 @@ print(gcf,'-dpng','-r200','./PaperFigs/disp_grid.png')
     disp("Net HMM dp: " + (dp(1, 1) - dp(end - finalindex, 1)))
     disp("Net SC dp: " + (dp(1, 2) - dp(end - finalindex, 2)))
 
-    GPSrms = u - permute(usim(:, :, 1:14), [3, 2, 1]);
-    GPSrms = GPSrms(:);
-    GPSrms = rms(GPSrms, 'omitnan');
-    disp("GPS RMS Misfit: " + GPSrms)
+    % GPSrms = u - permute(usim(:, :, 1:14), [3, 2, 1]);
+    % GPSrms = GPSrms(:);
+    % GPSrms = rms(GPSrms, 'omitnan');
+    % disp("GPS RMS Misfit: " + GPSrms)
 
     % tiltrms = rms(simtiltx - tiltx) + rms(simtilty - tilty);
     % disp("Tilt Unweighted RMS Misfit: " + tiltrms);
