@@ -12,8 +12,8 @@ if(solveweights)
     gamma_gps_init = gps_weight; % 67
     gamma_insar_init = insar_weight; % 530
     priormeans = [priormeans, gamma_gps_init, gamma_insar_init];
-    lb = [lb, -3, -3];
-    ub = [ub, 3, 3];
+    lb = [lb, -1, -1];
+    ub = [ub, 2, 2];
 end
 out_of_bnds = priormeans > ub | priormeans < lb;
 if(any(out_of_bnds)); error("Initial guess is not within bounds index " + strjoin(string(find(out_of_bnds)), ', ')); end
@@ -31,8 +31,8 @@ end
 % xstep = 0.02*ones(1,6); % 0.02
 % xstep(4) = 0.007; % horiz semi-diam 
 
-xstep = 2.5e-1*ones(1,size(bnds,1)); % 2.5e-2
-if(solveweights); xstep(end-1:end) = 0.03; end
+xstep = 3e-2*ones(1,size(bnds,1)); % 2.5e-2
+if(solveweights); xstep(end-1:end) = 0.01; end
 
 [x_keep, L_keep, count, gps_l2, insar_l2, prior_l2, weights] = mcmc('create_MCMC_data',[u1d(:);insaru(:)],priormeans,xstep, ...
     bnds, sigma, cinv_full, ntrials, gps_weight, insar_weight, prior_weight, paramNames, burn, solveweights, ...

@@ -45,35 +45,37 @@ N_insar = length(varargin{6});
 x = x0;
 % prior_weight = 0*5e2;
 dprop = fun(x, varargin{:});
-L_scaling = (1/length(data)) * 1;
+% L_scaling = 1;
 
 L_gps = -0.5 * sum(((data(1:N_gps) - dprop(1:N_gps))./sigma(1:N_gps)).^2);
 L_insar = -0.5 * (data(N_gps+1:end) - dprop(N_gps+1:end))' * cinv_full * (data(N_gps+1:end) - dprop(N_gps+1:end));
 prior_prob = 0;
 if(~solveweights)
+    L_scaling = (1/(N_gps * gps_weight + N_insar));
     for j = 1:numel(priorNames)
         name = priorNames{j};
         prior_prob = prior_prob + log(pdf(paramDists.(name).dist, x(j)));
     end
+    L = L_scaling * (gps_weight * L_gps + L_insar + prior_weight * prior_prob);
 else
+    L_scaling = 1;
     for j = 1:numel(priorNames)-2
         name = priorNames{j};
         prior_prob = prior_prob + log(pdf(paramDists.(name).dist, x(j)));
     end
     L_prior = prior_prob;
+    L = L_scaling * (L_gps*10^gps_weight + 10^insar_weight * L_insar + L_prior);
 end
-L = L_scaling * (L_gps*10^gps_weight + 10^insar_weight * L_insar + L_prior);
+
 barLength = 25;
 prevStr = '';
-
-
 
 count=0;
 xstep_int = xstep;
 xstep = max(abs(xbnds(:,2)'), abs(xbnds(:,1)')) .* xstep_int;
 
 p          = numel(x0);
-Sraw       = 1e-4 * eye(p);     % running (un‑scaled) covariance
+Sraw       = diag(xstep.^2);     % running (un‑scaled) covariance
 log_s      = log(0.1);          % log‑scale parameter  (starts small)
 targetAcc  = 0.234;             % optimal random‑walk rate
 Y          = 0.05;              % adaptation gain (decays)
@@ -81,6 +83,7 @@ eps_reg    = 1e-10;             % jitter
 
 mean_prop  = x0;
 accCount   = 0;
+scales = (xbnds(:,2) - xbnds(:,1));
 
 % Set step for negative values to be lower bounds:
 % xstep(1) = xbnds(1,1) * xstep_int(1); % dpHMM
@@ -90,13 +93,20 @@ if(solveweights)
     log_gamma_insar = x(end);
 end
 
+
 for k=1:Niter
     % generate proposal
     % xprop = x + xstep.*(rand(Nparams,1)'-0.5);
-
+    
     % scale   = exp(log_s);
     % SigProp = Sraw * scale^2 + eps_reg*eye(p);
-    xprop = x + xstep.*(rand(Nparams,1)'-0.5);
+    if k > 0 % During burn-in, stick to the simple diagonal proposal
+        xprop = x + xstep.*(rand(1, Nparams)-0.5);
+    else
+        CovProposal = (exp(log_s)^2) * Sraw + eps_reg * eye(p);
+        delta = mvnrnd(zeros(1, p), CovProposal); 
+        xprop = x + delta;
+    end
 
     % HMM_volume = xprop(2);
     % opt_vert_sd = (3/(4*pi) * HMM_volume * (aspect_ratio_HMM^2))^(1/3);
@@ -123,20 +133,16 @@ for k=1:Niter
         %Lprop = exp(-0.5*(norm(data-dprop))^2/sigma^2);
         % log likelihood
         
-        % Maybe make this L1 norm instead of L2
-        % Look at Kyle's distributions and see how smooth they are
-        % Try MC hammer algorithm to parallelize 
-        % Should be running 1M simulations
         prior_prob = 0;
         if(~solveweights)
             for j = 1:numel(priorNames)
                 name = priorNames{j};
-                prior_prob = prior_prob + log(pdf(paramDists.(name).dist, x(j)));
+                prior_prob = prior_prob + log(pdf(paramDists.(name).dist, xprop(j)));
             end
         else
             for j = 1:numel(priorNames)-2
                 name = priorNames{j};
-                prior_prob = prior_prob + log(pdf(paramDists.(name).dist, x(j)));
+                prior_prob = prior_prob + log(pdf(paramDists.(name).dist, xprop(j)));
                 % L_prior = - ((numel(priorNames)-3)/2) * log(gamma_prior^2) + (gamma_prior * prior_prob);
             end
             L_prior = prior_prob;
@@ -152,15 +158,15 @@ for k=1:Niter
             wrms_insar = sqrt(phi_insar / (N_insar * gamma_insar^2));
 
             weights(1,k) = log_gamma_gps; weights(2,k) = log_gamma_insar;
+            Lprop = L_scaling * (L_gps + L_insar + L_prior);
+
+            weights(1,k) = log_gamma_gps;
+            weights(2,k) = log_gamma_insar;
         else
             L_gps = -0.5 * sum(((data(1:N_gps) - dprop(1:N_gps))./sigma(1:N_gps)).^2);
             L_insar = -0.5 * (data(N_gps+1:end) - dprop(N_gps+1:end))' * cinv_full * (data(N_gps+1:end) - dprop(N_gps+1:end));
+            Lprop = L_scaling * (gps_weight * L_gps + L_insar + prior_weight * prior_prob);
         end
-        % if(mod(k, Niter/8) == 1)
-        %     disp("L_gps/L_insar = " + string(L_gps/L_insar) + ", L_prior/L_insar = " + string(L_prior/L_insar))
-        % end
-
-        Lprop = L_scaling * (L_gps + L_insar + L_prior);
 
         u=rand(1,1);
 
@@ -175,15 +181,15 @@ for k=1:Niter
 
     x_keep(:,k) = x;
     L_keep(k) = L;
-    weights(1,k) = log_gamma_gps;
-    weights(2,k) = log_gamma_insar;
 
-    % if k > 500          % first 500 steps = burn‑in, no adaptation
-    %     alpha = 1/(k-500);  % Robbins‑Monro weight
+    % adap_start = 1e3;
+    % if k > adap_start
+    %     lookback_length = 100; 
+    %     alpha = 1 / (k - adap_start + lookback_length); 
     %     % 3a update mean & raw covariance
     %     oldMean = mean_prop;
     %     mean_prop = mean_prop + alpha*(x - mean_prop);
-    %     Sraw      = (1-alpha)*Sraw + alpha*((x - oldMean)'*(x - oldMean));
+    %     Sraw = (1-alpha)*Sraw + alpha*((x - oldMean)'*(x - oldMean));
     % 
     %     % 3b update global scale toward target acceptance
     %     log_s = log_s + Y*alpha*( (accCount/k) - targetAcc );
@@ -195,8 +201,8 @@ for k=1:Niter
         acc_ratio = count/k;
         numEquals = round(percent * barLength);
         bar = [repmat('=', 1, numEquals) repmat(' ', 1, barLength - numEquals)];
-        progressStr = sprintf('[%s] %3.1f%% | WRMS G:%.2f I:%.2f | Lg/Li: %.2f Lp/Li: %.2f', bar, ...
-            acc_ratio*100, wrms_gps, wrms_insar, L_gps/L_insar, L_prior/L_insar);
+        progressStr = sprintf('[%s] %3.1f%% | Lg/Li: %.2f Lp/Li: %.2f', bar, ...
+            acc_ratio*100, gps_weight * L_gps/L_insar, prior_weight * prior_prob/L_insar);
 
         % Erase the previous progress bar
         if ~isempty(prevStr)
@@ -212,7 +218,7 @@ for k=1:Niter
 end
 fprintf('\n');
 disp("Acceptance ratio: " + count/Niter)
-
+% disp(CovProposal)
 % p        = 0.01;                              % 5 % neighbourhood
 % thresh   = prctile(real(L_keep(burn:end)), 100*(1-p));
 % idxTop   = L_keep(burn:end) >= thresh;

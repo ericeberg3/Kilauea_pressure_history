@@ -10,9 +10,11 @@ function plotLcurve(l_curve_points, l_curve_type, prior_weights, gps_weights)
     if(l_curve_type == "prior")
         xl = l_curve_points(1,:) + l_curve_points(2,:);
         yl = abs(l_curve_points(3,:));
+        chosen_weights = prior_weights;
     else
         xl = l_curve_points(1,:);
         yl = l_curve_points(2,:);
+        chosen_weights = gps_weights;
     end
     
     % Scatter, mapping color to gps_weights
@@ -21,7 +23,7 @@ function plotLcurve(l_curve_points, l_curve_type, prior_weights, gps_weights)
     % Choose colormap and add colorbar
     
     if(l_curve_type == "prior")
-        scatter_handle = scatter(xl(:), yl(:), 400, prior_weights(1:length(xl)), 'filled');
+        scatter_handle = scatter(xl(:), yl(:), 400, prior_weights(:), 'filled');
         colormap(parula);
         c = colorbar;
         c.Label.String = 'Prior Weight';
@@ -48,7 +50,7 @@ function plotLcurve(l_curve_points, l_curve_type, prior_weights, gps_weights)
         sprintf('GPS L2: %.2e\nInSAR L2: %.2e\nGPS Weight: %.1e', ...
                 event_obj.Position(1), ...
                 event_obj.Position(2), ...
-                gps_weights(event_obj.DataIndex)));
+                chosen_weights(event_obj.DataIndex)));
     
     exportgraphics(l_curve, "./PaperFigs/l_curve_" + l_curve_type + ".png", 'Resolution', 500);
 

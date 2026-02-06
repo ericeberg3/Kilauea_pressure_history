@@ -185,8 +185,8 @@ roman_parameters = [vert_sd_HMM, vert_sd_HMM/(aspect_ratio_HMM), 90, 0, 0, 0, -9
 % xSC, ySC, dSC, "SC aspect ratio", "dip", strike, "dvSC_insar", "dvSC_gps", volSC]
 % yHMM lb used to be -0.5e3 + npitloc(2)
 
-lb = [-5e7, -5e7, 1e8, -100, 0, -16e2, 0.8, ...
-    -2.7e3, -2.8e3, -4.7e3, 0.1, 45, 0, -5e7, -5e7, 2.0e9]; 
+lb = [-1e8, -1e8, 1e8, -100, 0, -16e2, 0.8, ...
+    -2.7e3, -2.8e3, -4.7e3, 0.1, 45, 0, -1e8, -1e8, 2.0e9]; 
 ub = [1e6, 1e6, 3e10, 227, 1050, -7.5e2, 1.8, ...
      2.2e3, -0.45e3, -2.7e3, 1, 90, 180, 1e6, 1e6, 20e9]; 
 
@@ -253,55 +253,66 @@ insarx = [insarx_asc, insarx_desc];
 insary = [insary_asc, insary_desc];
 block_size = [blocks_asc, blocks_desc];
 
-%% MCMC Static inversion
+%% Set up L curve variables
+% gps_weights = linspace(8e1, 6e2, 12);
+% prior_weights = linspace(7e1, 1e5, 10);
+burn = 1e4;
+ntrials = 1e6; % Customize to get convergence
 paramNames = {'dvHMM_insar', 'dvHMM_gps', 'volHMM', 'xHMM', 'yHMM', 'dHMM', 'alphaHMM' ...
     'xSC', 'ySC', 'dSC', 'alphaSC', 'dipSC', 'strikeSC', 'dvSC_insar', 'dvSC_gps', 'volSC'};
-ntrials = 3e5; % Customize to get convergence
 
+gps_weights = linspace(1.5e2, 5e2, 10);
+prior_weights = linspace(600, 1.5e3, 10);
+posteriors_list = zeros(length(paramNames), ntrials - burn + 1, length(gps_weights));
+%zeros(length(paramNames), ntrials - burn + 1, length(gps_weights));
+optParams_list = zeros(length(paramNames), length(gps_weights));
+l_curve_points = zeros(3,length(gps_weights));
+dynamic_gps_weights = [];
+dynamic_prior_weights = [];
+
+%% MCMC Static inversion
+% D = parallel.pool.DataQueue;
+% afterEach(D, @(x) fprintf('Finished iteration %d\n', x));
 % Testing GPS and prior weights.
 % gps_weights = linspace(4e1, 8e1, 10);
 % prior_weights = linspace(3e2, 1e3, 10);
-gps_weights = linspace(8e1, 6e2, 12);
-prior_weights = linspace(7e1, 1e5, 10);
 
-gps_weight = 1;% 6.7e1  Optimal weight based on L curve
-insar_weight = 4;%5.3e2; % Optimal weight based on L curve
-prior_weight = 0.1;
+gps_weight = 2e2; %log10(0.3);% 6.7e1  Optimal weight based on L curve
+insar_weight = 1; %log10(6);%5.3e2; % Optimal weight based on L curve
+prior_weight = 1e3;
 % burn = 0.5e3;
-burn = 4e3;
 
 delete(gcp('nocreate'));
 
 % --- Set if we want to run MCMC, plot the L curve, and the type of L curve
 % to create --- %
-solveweights = true;
+solveweights = false;
 runMCMC = true;
 run_L_curve = false;
 l_curve_type = "gps"; % 'prior' to test prior weights, 'gps' to test gps weights
 % for l_curve_type = ["prior", "gps"]
 % For loop to create L curve
-n_l_curve = length(gps_weights);
 if(~run_L_curve)
     n_l_curve = 1; 
 else
     % Set up log likelihood lists for L curve creation. 
     gps_l2s = zeros(1,length(gps_weights));
     insar_l2s = zeros(1,length(gps_weights));
-    posteriors_list = zeros(length(paramNames), ntrials - burn + 1, length(gps_weights));
-    optParams_list = zeros(length(paramNames), length(gps_weights));
-    l_curve_points = zeros(3,length(gps_weights));
+    n_l_curve = length(gps_weights);
 end
 start_params = taiyi_parameters;
 % Move taiyi depth down a bit
 % start_params(7) = start_params(7) - 300;
+prior_params = start_params;
 for i = 1:n_l_curve
-    prior_params = start_params;
+    tic;
+    % prior_params = start_params;
     
     % Check if we are doing L curve analysis. If so set weight
     % appropriately
     if(run_L_curve)
-        if(l_curve_type == "prior"); prior_weight = prior_weights(i); gps_weight = 6.7e1;
-        else; prior_weight = 5.3e2; gps_weight = gps_weights(i); end
+        if(l_curve_type == "prior"); prior_weight = prior_weights(i); gps_weight = 2.2e2;
+        else; prior_weight = 1.5e2; gps_weight = gps_weights(i); end
     end
         
     if(runMCMC)
@@ -317,44 +328,69 @@ for i = 1:n_l_curve
         start_params = get_full_m(taiyi_parameters, real(optParams)', true, "insar");
 
         if(~run_L_curve)
-            % save Data/MCMC_1e6_SCvol_topbnd.mat optParams posterior L_keep gps_l2 insar_l2 prior_l2;
+            % save Data/MCMC_final_1e6_dv_gps2e2_insar1e3.mat optParams posterior L_keep gps_l2 insar_l2 prior_l2;
         else
-            l_curve_points(1,i) = gps_l2;
-            l_curve_points(2,i) = insar_l2;
-            l_curve_points(3,i) = prior_l2;
+            l_curve_points(:, i) = [gps_l2; insar_l2; prior_l2];
     
             posteriors_list(:, :, i) = posterior;
             optParams_list(:, i) = optParams;
+            % dynamic_gps_weights(i) = gps_weight;
+            % dynamic_prior_weights(i) = prior_weight;
+
+            % plotLcurve(l_curve_points, l_curve_type, dynamic_prior_weights, dynamic_gps_weights);
         end
     else
         % load Data/MCMC_vars_1e6_allparams_nodpineq.mat;
-        load Data/MCMC_1e6_SCvol_topbnd.mat;
+        % load Data/MCMC_1e6_SCvol_topbnd.mat;
+        % load Data/MCMC_1e6_vol_gps60_prior200.mat;
         [~, ind] = max(L_keep);
         optParams = posterior(:, ind);
     end
-    
+    % send(D, i);
+    toc;
 end
+
+
+% figure(1); clf;
+% subplot(1,2,1); histogram(weights(1,burn:end)); title("GPS weight"); xline(opt_weights(1));
+% subplot(1,2,2); histogram(weights(2,burn:end)); title("InSAR weight"); xline(opt_weights(2));
+
 %%
-figure(1); clf;
-subplot(1,2,1); histogram(weights(1,burn:end)); title("GPS weight"); xline(opt_weights(1));
-subplot(1,2,2); histogram(weights(2,burn:end)); title("InSAR weight"); xline(opt_weights(2));
-
-
 % Get the full geometry parameters based on the optimization results:
 % Save and plot l curve data
 if(run_L_curve)
-    % save("Data/l_curve_data_" + l_curve_type + "_inversion1.mat", "l_curve_points", "l_curve_type", "prior_weights", "gps_weights");
-    % load Data/l_curve_data_prior.mat;
+    gps_weights1 = linspace(1,1e3, 10);
+    prior_weights1 = linspace(100, 2e3, 10);
+
+    gps_weights2 = linspace(1.5e2, 5e2, 10);
+    prior_weights2 = linspace(600, 1.5e3, 10);
+    % save("Data/l_curve_data_" + l_curve_type + "_dvinversion_5e5_2.mat", "l_curve_points", "l_curve_type", "dynamic_prior_weights", "dynamic_gps_weights", "posteriors_list");
+    load("Data/l_curve_data_gps_dvinversion_5e5.mat", "l_curve_points", "l_curve_type");
+    l_curve_combined = l_curve_points;
+    load("Data/l_curve_data_gps_dvinversion_5e5_2.mat", "l_curve_points", "l_curve_type");
+
+    l_curve_combined = [l_curve_combined, l_curve_points];
+    gps_weights_combined = [gps_weights1, gps_weights2];
+    prior_weights_combined = [prior_weights1, prior_weights2];
+
     posterior = squeeze(posteriors_list(:, :, end));
     optParams = optParams_list(:, end)';
     disp(gps_weights(end));
-    plotLcurve(l_curve_points, l_curve_type, prior_weights, gps_weights);
+    plotLcurve(l_curve_combined, l_curve_type, prior_weights_combined, gps_weights_combined);
 end
 % end
-
+%%
 % Get the full geometry parameters based on the optimization results:
-disp("GPS L2: " + gps_l2 + " InSAR L2: " + insar_l2);
+% disp("GPS L2: " + gps_l2 + " InSAR L2: " + insar_l2);
+subsample = true;
+if(subsample)
+    
+    [~, ind] = max(L_keep);
+    optParams = posterior(:, ind);
+
 optimizedM = get_full_m(taiyi_parameters, optParams', true, "insar");
+
+
 
 %%
 % Show parameter table
@@ -368,7 +404,12 @@ optParams = real(optParams);
 % optParams2(5) = -3e7;
 % optParams2(3) = 1;
 % optimizedM = get_full_m(optimizedM, optParams2, true, "insar", true);
-
+figure(1); clf;
+for i = 1:16
+    subplot(4, 4, i);
+    plot(posterior(i, :))
+    title(paramNames{i})
+end
 
 %% Plot histogram of each parameter
 plotParamNames = {
@@ -389,6 +430,8 @@ plotParamNames = {
   '$\Delta V_{\mathrm{SC}}^{\mathrm{GPS}}\ (\mathrm{MPa})$', ...
   '$V_{\mathrm{SC}}\ (\mathrm{km}^3)$',
 };
+
+load Data/paramDists.mat;
 
 % Scale units to appropriate factor
 unitScaling = [1e-9, 1e-9, 1e-9, 1e-3, 1e-3, 1e-3, 1, ...
@@ -602,7 +645,7 @@ dp(TF, 1) = NaN;
 dp(:, 1) = fillmissing(dp(:, 1), "makima", 1);
 
 %% Error analysis
-N_draws = 20;
+N_draws = 100;
 N_noise = 5;
 
 disp("Getting errors...")
@@ -688,7 +731,7 @@ makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilty, usim, 
 
 %% Insar plotting
 % Set if we want to plot the ascending or descending track with insarmode
-insarmode = "asc";
+insarmode = "desc";
 % make predicted insar data
 if(insarmode == "asc")
     ind = (insar_lengths(1) + 1):sum(insar_lengths);

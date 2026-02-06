@@ -252,6 +252,9 @@ linkaxes([background_ax, inax],'xy');
 if(con)
     % regenerate / update the color-bar
     cb = colorbar(inax);
+    c_pos = cb.Position; % Get the current position [left, bottom, width, height]
+    c_pos(3) = 0.05;    % Increase the width (3rd element) to 0.05 (adjust as needed)
+    cb.Position = c_pos;
     % cb.Label.String = 'LOS displacement (m)';
     % cb.Location = 'manual';
     % cb.Position = [0.773 0.665 0.04 0.25];
@@ -263,7 +266,10 @@ end
 
 
 pos = background_ax.Position;
+pos(3) = pos(3) - 0.04;
 inax.Position = pos;
+background_ax.Position = pos;
+
 set(inax, 'Layer', 'top')
 set(gca, 'FontSize', 42, "LineWidth", 3); % 'YTickLabel', []
 if(~xon) set(gca,'XTickLabel', []); end
