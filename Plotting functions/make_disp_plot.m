@@ -226,5 +226,5 @@ end
 
 % —— Export as high-res PNG ——
 set(gcf,'PaperUnits','inches','PaperPosition',[0 0 17 22]); % 10x8 inch canvas
-print(gcf,'-dpng','-r200','./PaperFigs/disp_grid.png')
+% print(gcf,'-dpng','-r200','./PaperFigs/disp_grid.png')
 end

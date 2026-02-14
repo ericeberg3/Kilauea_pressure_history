@@ -75,7 +75,7 @@ function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilt
     ylabel('Pressure Change [MPa]','FontSize',baseFont+2)
     title('Halemaʻumaʻu (HMM)', 'FontSize', baseFont+4)
     grid on; box on; axis square
-    set(ax1,'LineWidth',1.4, 'YLim', [-15, 5]);
+    set(ax1,'LineWidth',1.4, 'YLim', [-30, 5]);
 
     % ======================== 2) SC subplot ==================================
     ax2 = nexttile;  hold(ax2,'on'); 
@@ -92,6 +92,7 @@ function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilt
     title('South Caldera (SC)', 'FontSize', baseFont+4)
     grid on; box on; axis square;
     set(ax2,'LineWidth',1.4);
+    ylim([-10, 1]);
 
 
     % ======================== 3) tau subplot ==================================
@@ -106,6 +107,7 @@ function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilt
     ax3.YAxis.FontSize = baseFont - 4;
     ylabel("\Delta \tau [MPa]", 'FontSize', baseFont+2);
     title("Average shear stress change vs. time", 'FontSize', baseFont+4)
+    ylim([-3, 15]);
 
     % ========= P*V vs. time plot (both SC and HMM) =======
     % First calculate the ratio between a unit pressure change and a unit
@@ -132,15 +134,15 @@ function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilt
 
     ax4 = nexttile; hold(ax4, 'on');
     patch(ax4, xPatch, yPatch_SC, greyColor, 'FaceAlpha', 0.5, 'EdgeColor', 'none');
-    plot(ax4, tvec, hmm_vp, 'Color', [199, 160, 160]./255, 'LineWidth', 2, 'DisplayName', 'HMM');
+    % plot(ax4, tvec, hmm_vp, 'Color', [199, 160, 160]./255, 'LineWidth', 2, 'DisplayName', 'HMM');
     plot(ax4, tvec, sc_vp, 'Color', pressure_color, 'LineWidth', 2, 'DisplayName', 'SC');
     grid on; box on; axis square;
     set(ax4, 'LineWidth', 1.4);
     ax4.XAxis.FontSize = baseFont - 4;
     ax4.YAxis.FontSize = baseFont - 4;
-    ylim(ax4, [-0.05, 0.005])
+    ylim(ax4, [-0.02, 0.005])
     ylabel("Volume change [km^3]", 'FontSize', baseFont+2);
-    title("Volume change history", 'FontSize', baseFont+4)
+    title("SC Volume change", 'FontSize', baseFont+4)
     % legend(ax4, "FontSize", baseFont, "Location", "southwest")
 
     %%  Collapse markers & amplitude calculation
@@ -198,81 +200,9 @@ function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilt
     end
 
 
-    %% Making grid of displacements and tilt
-    % for j = 1:1
-    %     disptype = j;
-    %     fig = figure(7);
-    %     % disptype = 2; % 1 = x, 2 = y, 3 = z
-    % 
-    %     tlo = tiledlayout(4,4);
-    %     if(disptype == 1)
-    %         title(tlo, "East Displacement vs. Time", 'FontSize', 24);
-    %     elseif(disptype == 2)
-    %         title(tlo, "North Displacement vs. Time", 'FontSize', 24);
-    %     else
-    %         title(tlo, "Vertical Displacement vs. Time", 'FontSize', 24);
-    %     end
-    % 
-    %     for i = 1:max(size(GPSNameList) + 1)
-    %         nexttile
-    %         if(i < length(GPSNameList) + 1)
-    %             if(disptype == 1)
-    %                 plot(t(1:end-finalindex), ux(i, 1:end-finalindex), '-', 'DisplayName', 'GPS', 'LineWidth', 1.2);
-    %                 hold on;
-    %                 plot(t(1:end-finalindex), usim(1:end-finalindex, 1, i), 'DisplayName', 'LSQ', 'LineWidth', 1.6);
-    %                 plot(t(end - finalindex), ux(i, end - finalindex), 'o-', 'MarkerFaceColor','red');
-    % 
-    %                 plot([0, 0], [0, offsets(i, j)], "LineWidth", 8);
-    %             elseif(disptype == 2)
-    %                 plot(t(1:end-finalindex), uy(i, 1:end-finalindex), '-', 'DisplayName', 'GPS', 'LineWidth', 1.2);
-    %                 hold on;
-    %                 plot(t(1:end-finalindex), usim(1:end-finalindex, 2, i), 'DisplayName', 'LSQ', 'LineWidth', 1.6);
-    %                 plot(t(end - finalindex), uy(i, end - finalindex), 'o-', 'MarkerFaceColor','red');
-    % 
-    %                 plot([0, 0], [0, offsets(i, j)], "LineWidth", 8);
-    %             else
-    %                 plot(t(1:end-finalindex), uz(i, 1:end-finalindex), '-', 'DisplayName', 'GPS', 'LineWidth', 1.2);
-    %                 hold on;
-    %                 plot(t(1:end-finalindex), squeeze(usim(1:end-finalindex, 3, i)), 'DisplayName', 'LSQ', 'LineWidth', 1.6);
-    %                 plot(t(end - finalindex), uz(i, end - finalindex), 'o-', 'MarkerFaceColor','red');
-    % 
-    %                 plot([0, 0], [0, offsets(i, j)], "LineWidth", 8);
-    %                 % xline(collapset);
-    %             end
-    %             if(GPSNameList(i) == "UWEV" || GPSNameList(i) == "BYRL" || GPSNameList(i) == "CRIM")
-    %                     set(gca,'Color','k');
-    %             end
-    %             ylabel("Displacement (m)");
-    %             title(GPSNameList(i))
-    %         else
-    %             simtiltx = (gTiltHMM(1) .* dp(:, 1)) + (gTiltSC(1) .* dp(:, 2));
-    %             plot(t(1:end-finalindex),tiltx(1:end-finalindex), '-', 'DisplayName', 'Data', 'LineWidth', 1.2);
-    %             hold on;
-    %             plot(t(1:end-finalindex), simtiltx(1:end-finalindex), '-', 'DisplayName', 'LSQ', 'LineWidth', 1.6);
-    %             title("Tilt e");
-    %             ylim([-30, 250]);
-    %             ylabel("Tilt (µrad)")
-    %             hold off;
-    %             nexttile;
-    %             simtilty = (gTiltHMM(2) .* dp(:, 1)) + (gTiltSC(2) .* dp(:, 2));
-    %             plot(t(1:end-finalindex), tilty(1:end-finalindex), '-', 'DisplayName', 'Data', 'LineWidth', 1.2);
-    %             hold on;
-    %             plot(t(1:end-finalindex), simtilty(1:end-finalindex), 'DisplayName', 'LSQ', 'LineWidth', 1.6);
-    %             ylim([-90, 130]);
-    %             ylabel("Tilt (µrad)")
-    %             title("Tilt n");
-    %         end
-    %         hold off;
-    %     end
-    %     leg = legend('Orientation', 'Horizontal');
-    %     leg.Layout.Tile = 'north';
-    %     leg.FontSize = 14;
-    %     if(saveFigs)
-    %         % saveas(7, "./Figures/displacements_" + disptype + "_" + num2str(ntrials, "%.1e") + "trials.fig"); 
-    %         exportgraphics(fig, "./PaperFigs/displacements_" + disptype + ".png", 'Resolution', 500);
-    %     end
-    % end
+%% Making grid of displacements and tilt
 
+make_disp_plot(t, finalindex, GPSNameList, ux, uy, uz, usim, u_low, u_high, tiltx, tilty, true)
 
 % —— Toggle inclusion of the three inactive stations ——
 includeInactive = true;  % set to true to include UWEV, BYRL, CRIM
@@ -745,7 +675,6 @@ print(gcf,'-dpng','-r200','./PaperFigs/disp_grid.png')
 
 
     %% Plot just the reservoir geometry:
-        %% Quiver Plot
     
     hold off;
     figquiver = figure(7);

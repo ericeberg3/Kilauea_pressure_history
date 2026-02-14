@@ -23,6 +23,9 @@ function  [x_keep, L_keep, count, gps_l2, insar_l2, prior_l2, weights] = mcmc(fu
 %
 %  P Segall: 2012
 
+taiyi_parameters = [1600.79, 914.47, 90, 0, 50, 200, -2.18e3-300, -4e7, ... 
+     277.01, 1621.47, 63, 136, 0, 0, -3630, -10e6];
+
 fun = fcnchk(func);
 load Data/paramDists.mat paramDists;
 % fun = str2func(func);
@@ -112,7 +115,8 @@ for k=1:Niter
     % opt_vert_sd = (3/(4*pi) * HMM_volume * (aspect_ratio_HMM^2))^(1/3);
     % surf_depth = xprop(5) - opt_vert_sd;
     % check bounds
-    if all(xprop > xbnds(:,1)') && all(xprop < xbnds(:,2)')
+    if all(xprop > xbnds(:,1)') && all(xprop < xbnds(:,2)') ...
+            && ~check_intersection(get_full_m(taiyi_parameters, xprop, true, "insar"), 2)
         % && xprop(2) < xprop(1) && xprop(end) < xprop(end-1) % GPS pressure < insar pressure
         if(solveweights)
             log_gamma_gps = xprop(end-1);

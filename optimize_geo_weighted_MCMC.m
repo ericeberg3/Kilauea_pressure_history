@@ -191,7 +191,7 @@ ub = [1e6, 1e6, 3e10, 227, 1050, -7.5e2, 1.8, ...
      2.2e3, -0.45e3, -2.7e3, 1, 90, 180, 1e6, 1e6, 20e9]; 
 
 % Save figures for export
-saveFigs = false;
+saveFigs = true;
 
 %% Loading in InSAR data for geometry inversion
 % All insar data was created using scripts in the "InSAR processing" folder
@@ -312,7 +312,7 @@ for i = 1:n_l_curve
     % appropriately
     if(run_L_curve)
         if(l_curve_type == "prior"); prior_weight = prior_weights(i); gps_weight = 2.2e2;
-        else; prior_weight = 1.5e2; gps_weight = gps_weights(i); end
+        else; prior_weight = 1e3; gps_weight = gps_weights(i); end
     end
         
     if(runMCMC)
@@ -328,7 +328,7 @@ for i = 1:n_l_curve
         start_params = get_full_m(taiyi_parameters, real(optParams)', true, "insar");
 
         if(~run_L_curve)
-            % save Data/MCMC_final_1e6_dv_gps2e2_insar1e3.mat optParams posterior L_keep gps_l2 insar_l2 prior_l2;
+            save Data/MCMC_final_1e6_dv_gps2e2_insar1e3_nointersect.mat optParams posterior L_keep gps_l2 insar_l2 prior_l2;
         else
             l_curve_points(:, i) = [gps_l2; insar_l2; prior_l2];
     
@@ -340,7 +340,8 @@ for i = 1:n_l_curve
             % plotLcurve(l_curve_points, l_curve_type, dynamic_prior_weights, dynamic_gps_weights);
         end
     else
-        load Data/MCMC_final_1e6_dv_gps2e2_insar1e3.mat;
+        % load Data/MCMC_final_1e6_dv_gps2e2_insar1e3.mat;
+        load Data/MCMC_final_1e6_dv_gps2e2_insar1e3_nointersect.mat;
         % load Data/MCMC_1e6_SCvol_topbnd.mat;
         % load Data/MCMC_1e6_vol_gps60_prior200.mat;
         [~, ind] = max(L_keep);
@@ -374,37 +375,37 @@ if(run_L_curve)
 end
 % end
 %%
-optimizedM = get_full_m(taiyi_parameters, optParams', true, "insar");
+% optimizedM = get_full_m(taiyi_parameters, optParams', true, "insar");
 % Get the full geometry parameters based on the optimization results:
 % disp("GPS L2: " + gps_l2 + " InSAR L2: " + insar_l2);
 
 % Subsample all geometries for dpHMM_gps < -10MPa
 subsample = true;
-if(subsample)
-    HMM_p_factor = zeros(1, length(posterior));
-    for i = 1:length(posterior)
+HMM_p_factor = zeros(1, length(posterior));
+intersections = false(1, length(posterior));
+for i = 1:length(posterior)
         post_samp = posterior(:,i)';
         m_tmp = get_full_m(taiyi_parameters, post_samp, true, "insar");
         m_tmp(8) = 1;
         HMM_p_factor(i) = (spheroid_pFromV(m_tmp(1:8), 0.25, 3.08*10^9, 'volume'));
-    end
-    
+        intersections(i) = check_intersection(m_tmp, 2);
+end
+%%
+if(subsample)
     dpHMM_gps = posterior(2,:).*HMM_p_factor;
     dpHMM_insar = posterior(1,:).*HMM_p_factor;
     dp_posterior = posterior; dp_posterior(1,:) = dpHMM_insar; dp_posterior(2,:) = dpHMM_gps;
 
-    subsamp_inds = dp_posterior(2,:) > -10e6;
+    subsamp_inds = dpHMM_gps > -15e6 & dpHMM_insar > -22e6;
     [~, ind] = max(L_keep(subsamp_inds));
     subsamp_posterior = posterior(:, subsamp_inds);
-    subsamp_posterior(1:2, :) = dp_posterior(1:2, subsamp_inds);
+    % subsamp_posterior(1:2, :) = dp_posterior(1:2, subsamp_inds);
     optParams_subsamp = subsamp_posterior(:, ind);
 end
 %%
-lb_new = lb; 
-ub_new = ub;
 
-plotHists(subsamp_posterior, optParams_subsamp, lb_new, ub_new, paramNames, saveFigs)
-posterior = subsamp_posterior;
+plotHists(posterior, dp_posterior, subsamp_inds, ind, optParams_subsamp, lb, ub, paramNames, saveFigs)
+% posterior = subsamp_posterior;
 optParams = optParams_subsamp';
 
 %%
@@ -413,9 +414,9 @@ disp(array2table(optParams(:).', 'VariableNames',paramNames));
 % Make sure parameters are real
 optParams = real(optParams);
 
-plotHists(posterior, optParams, lb, ub, paramNames, saveFigs)
+% plotHists(posterior, optParams, lb, ub, paramNames, saveFigs)
 optimizedM = get_full_m(taiyi_parameters, optParams, true, "insar");
-
+load Data/paramDists.mat;
 
 %% Plot correlation btwn parameters
 % plotParamNames_nounit = {
@@ -650,7 +651,7 @@ makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilty, usim, 
 
 %% Insar plotting
 % Set if we want to plot the ascending or descending track with insarmode
-insarmode = "desc";
+insarmode = "asc";
 % make predicted insar data
 if(insarmode == "asc")
     ind = (insar_lengths(1) + 1):sum(insar_lengths);
@@ -668,10 +669,10 @@ cLimits = [-1.55, 0.55];
 opacity = 0.7;
 cmap = turbo;
 % Set if x and y axis labels are on
-xon = true; yon = false;
+xon = false; yon = false;
 % Set if colorbar is on
-con = true;
+con = false;
 
-plot_insar_new(insarx(ind), insary(ind), insaru_full(ind) - insaru_pred', block_size(ind), look, x, y, u1d, u1d, xon, yon, con, ...
+plot_insar_new(insarx(ind), insary(ind), insaru_pred', block_size(ind), look, x, y, u1d, u1d, xon, yon, con, ...
     31, GPSNameList, optimizedM, coast_new,cLimits, opacity, saveFigs, insarmode);
 %  - insaru_pred' insaru_full(ind)
