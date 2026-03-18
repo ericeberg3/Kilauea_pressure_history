@@ -31,7 +31,7 @@ end
 % xstep = 0.02*ones(1,6); % 0.02
 % xstep(4) = 0.007; % horiz semi-diam 
 
-xstep = 3e-2*ones(1,size(bnds,1)); % 2.5e-2
+xstep = 2e-2*ones(1,size(bnds,1)); % 2.5e-2
 if(solveweights); xstep(end-1:end) = 0.01; end
 
 [x_keep, L_keep, count, gps_l2, insar_l2, prior_l2, weights] = mcmc('create_MCMC_data',[u1d(:);insaru(:)],priormeans,xstep, ...

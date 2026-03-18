@@ -421,7 +421,7 @@ optimizedM = get_full_m(taiyi_parameters, optParams, true, "insar");
 load Data/paramDists.mat;
 
 %% Plot correlation btwn parameters
-plotCorr(posterior, saveFigs)
+% plotCorr(posterior, saveFigs)
 % clearvars i j options resnorm resdpos dsize dangle A b res;
 
 %% Creating greens functions using the new parameters for M

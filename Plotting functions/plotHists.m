@@ -31,6 +31,9 @@ dp_posterior_2 = dp_posterior(:, subsamp_inds);
 % Convert HMM top depth to centroid, include pressure changes:
 taiyi_parameters = [1600.79, 914.47, 90, 0, 50, 200, -2.18e3-300, -4e7, ... 
      277.01, 1621.47, 63, 136, 0, 0, 0, -3630, -10e6];
+
+ci = prctile(posterior(6,:), [5 95]) * 1e-3;
+fprintf('%s: MAP = %.2f, 90%% CI [%.2f, %.2f]\n', 'top depth', 0.8, ci(1), ci(2));
 for i = 1:length(posterior)
     m_tmp = get_full_m(taiyi_parameters, posterior(:,i)', true, "insar");
     posterior(6,i) = m_tmp(7);
@@ -47,6 +50,7 @@ posterior_2 = [posterior_2(1:2, :); dp_posterior_2(1:2, :); posterior_2(3:end-1,
     dp_posterior_2(end-2:end-1, :); posterior_2(end,:)];
 paramNames_full = [paramNames{1:2}, "dpHMM_insar", "dpHMM_gps", paramNames{3:end-1}, ...
     "dpSC_insar", "dpSC_gps", paramNames{end}];
+optimizedM = get_full_m(zeros(1, 16), optParams', true, "insar");
 optParams = [optParams(1:2); dp_posterior_2(1, opt_ind); dp_posterior_2(2, opt_ind); ...
     optParams(3:end-1); dp_posterior_2(end-2, opt_ind); dp_posterior_2(end-1, opt_ind); optParams(end)];
 lb = [lb(1:2), -60e6, -60e6, lb(3:end-1), -60e6, -60e6, lb(end)];
@@ -111,7 +115,7 @@ for i = 1:20
     end
     
     % Plot MLE / Mean (For pressure/vol, use mean of samples; for geom use optParams)
-    hMLE = xline(mle*s, '--r', 'LineWidth', 2);
+    
     
     % Plot Priors
     % Extend prior beyond posterior range by 10% each side
@@ -119,7 +123,9 @@ for i = 1:20
         lb_chosen = -3.5e3;
         ub_chosen = -1.5e3;
         priorName = "dcHMM";
+        mle = optimizedM(7);
     end
+    hMLE = xline(mle*s, '--r', 'LineWidth', 2);
     % span = edges(end) - edges(1);
     name = plotParamNames{i};
     xGrid = linspace(lb_chosen, ub_chosen, 200)';
@@ -138,14 +144,15 @@ for i = 1:20
     % xlim([lb_chosen * s, ub_chosen * s]);
     % Formatting
     grid off;
-    set(gca, 'FontSize', 16);
-    title(name, 'Interpreter','latex', 'FontSize', 24);
+    set(gca, 'FontSize', 20, 'yticklabel', [], 'ytick', [], 'TickLength', [0.04, 0.04], 'LineWidth', 2);
+    
+    title(name, 'Interpreter','latex', 'FontSize', 30);
     axis square;
     xlim(histlims(i,:));
     
     % Print CI stats
     ci = prctile(data, [5 95]) * s;
-    fprintf('%s: 90%% CI [%.2f, %.2f]\n', name, ci(1), ci(2));
+    fprintf('%s: MAP = %.2f, 90%% CI [%.2f, %.2f]\n', name, mle*s, ci(1), ci(2));
 end
 
 % Add Legend

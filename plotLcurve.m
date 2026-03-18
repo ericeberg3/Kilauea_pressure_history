@@ -18,18 +18,20 @@ function plotLcurve(l_curve_points, l_curve_type, prior_weights, gps_weights)
     end
     
     % Scatter, mapping color to gps_weights
-    l_curve = figure; clf;
+    l_curve = figure(1); clf;
     
     % Choose colormap and add colorbar
     
     if(l_curve_type == "prior")
+        L_scaling = (10 * 3 * 2e2 + 2379); % L_scaling = N_gps * w_gps + N_insar
         scatter_handle = scatter(xl(:), yl(:), 400, prior_weights(:), 'filled');
+        % [~, ind] = min(abs(0.1 - prior_weights));
         colormap(parula);
         c = colorbar;
         c.Label.String = 'Prior Weight';
         xlabel("GPS L2 Norm + InSAR L2 Norm", 'FontSize', 24);
         ylabel("Prior Log Probability", 'FontSize', 24);
-        title("L-curve colored by prior weight", 'FontSize', 30);
+        % title("L-curve colored by prior weight", 'FontSize', 30);
     else
         scatter_handle = scatter(xl(:), yl(:), 400, gps_weights(:), 'filled');
         colormap(parula);
@@ -37,12 +39,15 @@ function plotLcurve(l_curve_points, l_curve_type, prior_weights, gps_weights)
         c.Label.String = 'GPS Weight';
         xlabel("GPS L2");
         ylabel("InSAR L2");
-        title("L-curve colored by GPS weight", 'FontSize', 30);
+        % title("L-curve colored by GPS weight", 'FontSize', 30);
     end
-    c.FontSize = 24;
+    c.FontSize = 32;
     axis square;
     ax = gca;
-    ax.FontSize = 24;
+    ax.FontSize = 32;
+    set(gcf, 'Units', 'inches');
+    set(gcf, 'Position', [2 2 15 15]); 
+    % xlim([420, 550])
     
     % Set up interactive data cursor
     dcm = datacursormode(gcf);

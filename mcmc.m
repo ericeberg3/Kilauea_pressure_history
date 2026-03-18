@@ -59,7 +59,7 @@ if(~solveweights)
         name = priorNames{j};
         prior_prob = prior_prob + log(pdf(paramDists.(name).dist, x(j)));
     end
-    L = L_scaling * (gps_weight * L_gps + L_insar + prior_weight * prior_prob);
+    L = L_scaling * (gps_weight * L_gps + L_insar) + prior_weight * prior_prob;
 else
     L_scaling = 1;
     for j = 1:numel(priorNames)-2
@@ -169,7 +169,7 @@ for k=1:Niter
         else
             L_gps = -0.5 * sum(((data(1:N_gps) - dprop(1:N_gps))./sigma(1:N_gps)).^2);
             L_insar = -0.5 * (data(N_gps+1:end) - dprop(N_gps+1:end))' * cinv_full * (data(N_gps+1:end) - dprop(N_gps+1:end));
-            Lprop = L_scaling * (gps_weight * L_gps + L_insar + prior_weight * prior_prob);
+            Lprop = L_scaling * (gps_weight * L_gps + L_insar) + prior_weight * prior_prob;
         end
 
         u=rand(1,1);
