@@ -261,12 +261,12 @@ ntrials = 1e6; % Customize to get convergence
 paramNames = {'dvHMM_insar', 'dvHMM_gps', 'volHMM', 'xHMM', 'yHMM', 'dHMM', 'alphaHMM' ...
     'xSC', 'ySC', 'dSC', 'alphaSC', 'dipSC', 'strikeSC', 'dvSC_insar', 'dvSC_gps', 'volSC'};
 
-gps_weights = linspace(1, 2e3, 10);
-prior_weights = linspace(0.005, 2, 10);
+gps_weights = logspace(-1, 4, 100);
+prior_weights = logspace(-1, 2, 100);
 posteriors_list = zeros(length(paramNames), ntrials - burn + 1, length(gps_weights));
 %zeros(length(paramNames), ntrials - burn + 1, length(gps_weights));
 optParams_list = zeros(length(paramNames), length(gps_weights));
-l_curve_points = zeros(3,length(gps_weights));
+l_curve_points = zeros(3,length(prior_weights));
 dynamic_gps_weights = [];
 dynamic_prior_weights = [];
 
@@ -277,42 +277,54 @@ dynamic_prior_weights = [];
 % gps_weights = linspace(4e1, 8e1, 10);
 % prior_weights = linspace(3e2, 1e3, 10);
 
-gps_weight = 5e2; %log10(0.3);% 6.7e1  Optimal weight based on L curve
+gps_weight = 30; %log10(0.3);% 6.7e1  Optimal weight based on L curve
 insar_weight = 1; %log10(6);%5.3e2; % Optimal weight based on L curve
-prior_weight = 0.5;
+prior_weight = 7;
 % burn = 0.5e3;
 
-delete(gcp('nocreate'));
+% delete(gcp('nocreate'));
 
 % --- Set if we want to run MCMC, plot the L curve, and the type of L curve
 % to create --- %
 solveweights = false;
 runMCMC = false;
-run_L_curve = false;
-l_curve_type = "prior"; % 'prior' to test prior weights, 'gps' to test gps weights
+run_L_curve = true;
+l_curve_type = "gps"; % 'prior' to test prior weights, 'gps' to test gps weights
 % for l_curve_type = ["prior", "gps"]
 % For loop to create L curve
 if(~run_L_curve)
     n_l_curve = 1; 
 else
     % Set up log likelihood lists for L curve creation. 
-    gps_l2s = zeros(1,length(gps_weights));
-    insar_l2s = zeros(1,length(gps_weights));
-    n_l_curve = length(gps_weights);
+    gps_l2s = zeros(1,length(prior_weights));
+    insar_l2s = zeros(1,length(prior_weights));
+    n_l_curve = length(prior_weights);
 end
 start_params = taiyi_parameters;
 % Move taiyi depth down a bit
 % start_params(7) = start_params(7) - 300;
 prior_params = start_params;
+
 for i = 1:n_l_curve
-    % tic;
+    tic;
     % prior_params = start_params;
     
     % Check if we are doing L curve analysis. If so set weight
     % appropriately
     if(run_L_curve)
-        if(l_curve_type == "prior"); prior_weight = prior_weights(i); gps_weight = 2e2;
-        else; prior_weight = 0.22; gps_weight = gps_weights(i); end
+        if(l_curve_type == "prior"); prior_weight = prior_weights(i); gps_weight = 30; %2e2;
+        else; prior_weight = 7; gps_weight = gps_weights(i); end
+  
+        
+        [optParams_i, gps_l2, insar_l2, prior_l2] = generate_l_curve_point(i, n_l_curve, u1d, insaru_full, ...
+            invStdPWRL, start_params, prior_params, xopt, yopt, zopt, insarx, insary, look, insar_lengths, ...
+            nanstatend, cinv_full, gps_weight, insar_weight, prior_weight, paramNames, lb, ub);
+        
+        % Store outputs for the current L-curve iteration
+        l_curve_points(:, i) = [gps_l2; insar_l2; prior_l2];
+        optParams_list(:, i) = optParams_i;
+        posteriors_list(:, 1, i) = optParams_i; % Placeholder dimension for backward compatibility
+        start_params = real(optParams_i);
     end
         
     if(runMCMC)
@@ -346,7 +358,7 @@ for i = 1:n_l_curve
         optParams = posterior(:, ind);
     end
     % send(D, i);
-    % toc;
+    toc;
 end
 
 % Get the full geometry parameters based on the optimization results:
@@ -357,22 +369,24 @@ if(run_L_curve)
     % 
     % gps_weights2 = linspace(1.5e2, 5e2, 10);
     % prior_weights2 = linspace(600, 1.5e3, 10);
-    % save("Data/l_curve_data_" + l_curve_type + "_dvinversion_5e5_nointersect_2.mat", "l_curve_points", "l_curve_type", "prior_weights", "gps_weights", "posteriors_list");
-    load("Data/l_curve_data_gps_dvinversion_5e5_nointersect.mat", "l_curve_points", "l_curve_type", "prior_weights", "gps_weights");
-    gps_weights_combined = gps_weights; prior_weights_combined = prior_weights;
-    l_curve_combined = l_curve_points;
-    
-    load("Data/l_curve_data_gps_dvinversion_5e5_nointersect_2.mat", "l_curve_points", "l_curve_type", "prior_weights", "gps_weights");
-    l_curve_combined = [l_curve_combined, l_curve_points];
-    gps_weights_combined = [gps_weights_combined, gps_weights];
-    prior_weights_combined = [prior_weights_combined, prior_weights];
+    save("Data/l_curve_data_" + l_curve_type + "_pattern_gps30_prior7.mat", "l_curve_points", "l_curve_type", "prior_weights", "gps_weights");
+
+
+    % load("Data/l_curve_data_gps_dvinversion_5e5_nointersect.mat", "l_curve_points", "l_curve_type", "prior_weights", "gps_weights");
+    % gps_weights_combined = gps_weights; prior_weights_combined = prior_weights;
+    % l_curve_combined = l_curve_points;
+    % 
+    % load("Data/l_curve_data_gps_dvinversion_5e5_nointersect_2.mat", "l_curve_points", "l_curve_type", "prior_weights", "gps_weights");
+    % l_curve_combined = [l_curve_combined, l_curve_points];
+    % gps_weights_combined = [gps_weights_combined, gps_weights];
+    % prior_weights_combined = [prior_weights_combined, prior_weights];
 
     
 
     posterior = squeeze(posteriors_list(:, :, end));
     optParams = optParams_list(:, end)';
     disp(gps_weights(end));
-    plotLcurve(l_curve_combined, l_curve_type, prior_weights_combined, gps_weights_combined);
+    plotLcurve(l_curve_points(:,:), l_curve_type, prior_weights, gps_weights);
 end
 % end
 %%
