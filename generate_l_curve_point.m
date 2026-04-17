@@ -8,6 +8,8 @@ function [optParams_i, gps_l2, insar_l2, prior_l2] = generate_l_curve_point(i, n
     data_obs = [u1d(:); insaru_full(:)];
     gps_obs = data_obs(1:length(u1d(:)));
     insar_obs = data_obs(length(u1d(:))+1:end);
+    lb = lb(:)';
+    ub = ub(:)';
     
     % 2. Setup GPS Standard Deviations array
     GPS_std = 1./invStdPWRL;
@@ -31,19 +33,28 @@ function [optParams_i, gps_l2, insar_l2, prior_l2] = generate_l_curve_point(i, n
     ub_norm = ones(1, length(ub));
     
     % 5. Normalize the warm-start initial point
-    x0_true = start_params;
+    x0_true = start_params(:)';
     x0_norm = (x0_true - lb) ./ (ub - lb);
     
     % Safety catch: Ensure the starting point is strictly within [0, 1]
     x0_norm = max(0, min(1, x0_norm));
     
     % 6. Initialize Pattern Search
+    % options = optimoptions('patternsearch', ...
+    %     'Display', 'off', ...           % Turned off so you don't get the confusing stop messages
+    %     'UseParallel', true, ...
+    %     'UseCompletePoll', true, ...
+    %     'MeshTolerance', 1e-4, ...  
+    %     'StepTolerance', 1e-4);
     options = optimoptions('patternsearch', ...
-        'Display', 'off', ...           % Turned off so you don't get the confusing stop messages
-        'UseParallel', true, ...
-        'UseCompletePoll', true, ...
-        'MeshTolerance', 1e-4, ...  
-        'StepTolerance', 1e-4);
+    'Display', 'off', ...
+    'UseParallel', true, ...
+    'UseCompletePoll', true, ...
+    'SearchFcn', {@searchlhs}, ...       % Implements global Latin Hypercube sampling
+    'UseCompleteSearch', true, ...       % Forces evaluation of all search points
+    'InitialMeshSize', 0.5, ...          % Starts with large exploratory steps in [0,1] space
+    'MeshTolerance', 1e-6, ...
+    'StepTolerance', 1e-6);
     
     % Run Pattern Search in the clean [0, 1] space
     [optParams_norm, ~] = patternsearch(obj_fun_norm, x0_norm, [], [], [], [], lb_norm, ub_norm, [], options);
@@ -91,11 +102,16 @@ function [cost, gps_l2, insar_l2, prior_l2] = compute_cost_lcurve(m, m_known, x,
         if isfield(pDists, name)
             dist = pDists.(name).dist;
             % Negative log-likelihood formulation
-            p_val = pdf(dist, m(idx));
-            if p_val > 0
-                prior_l2 = prior_l2 - log(p_val);
-            else
-                prior_l2 = prior_l2 + 1e6; % large penalty to restrict search logic
+            isUniform = isa(dist, 'prob.UniformDistribution') || ...
+                        (isprop(dist, 'DistributionName') && strcmpi(dist.DistributionName, 'uniform'));
+            if ~isUniform
+                p_val = pdf(dist, m(idx));
+                if p_val > 0
+                    prior_l2 = prior_l2 - log(p_val);
+                else
+                    distance_out = (m(idx) - m_known(idx))^2;
+                    prior_l2 = prior_l2 + 1e6 + (1e4 * distance_out);
+                end
             end
         end
     end

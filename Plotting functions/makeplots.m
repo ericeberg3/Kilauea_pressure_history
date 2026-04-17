@@ -1,5 +1,5 @@
 function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilty, ...
-    usim, t, nanstat, nanstatbeginning, finalindex, collapset, ...
+    usim, u1dsim, t, nanstat, nanstatbeginning, finalindex, collapset, ...
     dp, dp_low, dp_high, tau, tau_low, tau_high, optParams, optimizedM, GPSNameList, gTiltHMM, gTiltSC, xtilt, ytilt, tiltreduced, radscale, ...
     coast_new, taiyi_parameters, disptype, ntrials, offsets, saveFigs)
 
@@ -75,7 +75,7 @@ function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilt
     ylabel('Pressure Change [MPa]','FontSize',baseFont+2)
     title('Halemaʻumaʻu (HMM)', 'FontSize', baseFont+4)
     grid on; box on; axis square
-    set(ax1,'LineWidth',1.4, 'YLim', [-30, 5]);
+    set(ax1,'LineWidth',1.4, 'YLim', [-10, 2]);
 
     % ======================== 2) SC subplot ==================================
     ax2 = nexttile;  hold(ax2,'on'); 
@@ -92,7 +92,7 @@ function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilt
     title('South Caldera (SC)', 'FontSize', baseFont+4)
     grid on; box on; axis square;
     set(ax2,'LineWidth',1.4);
-    ylim([-10, 1]);
+    ylim([-10, 2]);
 
 
     % ======================== 3) tau subplot ==================================
@@ -107,7 +107,7 @@ function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilt
     ax3.YAxis.FontSize = baseFont - 4;
     ylabel("\Delta \tau [MPa]", 'FontSize', baseFont+2);
     title("Average shear stress change vs. time", 'FontSize', baseFont+4)
-    ylim([-3, 15]);
+    ylim([-1, 4]);
 
     % ========= P*V vs. time plot (both SC and HMM) =======
     % First calculate the ratio between a unit pressure change and a unit
@@ -140,7 +140,7 @@ function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilt
     set(ax4, 'LineWidth', 1.4);
     ax4.XAxis.FontSize = baseFont - 4;
     ax4.YAxis.FontSize = baseFont - 4;
-    ylim(ax4, [-0.02, 0.005])
+    ylim(ax4, [-0.025, 0.002])
     ylabel("Volume change [km^3]", 'FontSize', baseFont+2);
     title("SC Volume change", 'FontSize', baseFont+4)
     % legend(ax4, "FontSize", baseFont, "Location", "southwest")
@@ -191,7 +191,7 @@ function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilt
     fprintf('Amplitude ratio (SC/HMM) = %.3f \n', mean(ampl_ratio, 'omitnan'))
     fprintf(' SC pressure drop = %.3f MPa, [%.3f, %.3f] \n', sc_pressure(end), ...
         dp_low(end-finalindex,2), dp_high(end-finalindex,2));
-    fprintf('Average shear stress drop: %.2e \n', median(ampl_tau, 'omitnan'));
+    fprintf('Average shear stress drop: %.2e \n', median(ampl_tau/1e6, 'omitnan'));
     
     
     % ------------------------ Export (optional) ------------------------------
@@ -202,7 +202,7 @@ function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilt
 
 %% Making grid of displacements and tilt
 
-% plotDispGrid(t, finalindex, GPSNameList, u_low, u_high, ux, uy, uz, usim, tiltx, tilty, "PUHI", "north");
+% plotDispGrid(t, finalindex, GPSNameList, u_low, u_high, ux, uy, uz, usim, tiltx, tilty, "SDH", "east");
 make_disp_plot(t, finalindex, GPSNameList, ux, uy, uz, usim, u_low, u_high, tiltx, tilty, true)
 % —— Export as high-res PNG ——
 % set(gcf,'PaperUnits','inches','PaperPosition',[0 0 17 22]); % 10x8 inch canvas
@@ -242,7 +242,7 @@ make_disp_plot(t, finalindex, GPSNameList, ux, uy, uz, usim, u_low, u_high, tilt
     pred_color = "#A2142F";
     obs_color = "#026acc";
 
-    tiltscale = 2e-3;
+    tiltscale = 1e-3;
     u1d(end + 1, 1) = tiltreduced(1) .* tiltscale;
     u1d(end, 2) = tiltreduced(2) .* tiltscale;
     u1d(end, 3) = zeros(length(tiltreduced(1)), 1);
@@ -254,8 +254,8 @@ make_disp_plot(t, finalindex, GPSNameList, ux, uy, uz, usim, u_low, u_high, tilt
     gtot(:, end + 1) = [(gTiltHMM + gTiltSC), 0] .* tiltscale;
 
     % Set up optimization result vectors from LSQ solution
-    u1d_LSQ = usim(end-finalindex, :, :);
-    u1d_LSQ = squeeze(u1d_LSQ(1, :, :))';
+    u1d_LSQ = u1dsim; % usim(end-finalindex, :, :);
+    % u1d_LSQ = squeeze(u1d_LSQ(1, :, :))';
     u1d_LSQ(end, 1) = u1d_LSQ(end, 1) .* tiltscale;
     u1d_LSQ(end, 2) = u1d_LSQ(end, 2) .* tiltscale;
 
@@ -276,7 +276,7 @@ make_disp_plot(t, finalindex, GPSNameList, ux, uy, uz, usim, u_low, u_high, tilt
     realquiver = quiver3(x(~nanstat_quiver)', y(~nanstat_quiver)', zeros(size(x(~nanstat_quiver)))', u1d(gps_ind, 1) * radscale, u1d(gps_ind, 2) * radscale, ...
         u1d(gps_ind, 3) * 0, 'AutoScale', 'off', 'LineWidth',2, 'MaxHeadSize', 0.1, 'Color', obs_color, 'DisplayName', 'Data');
     simquiver = quiver3(x(~nanstat_quiver)', y(~nanstat_quiver)', zeros(size(x(~nanstat_quiver)))', u1d_LSQ(~nanstat_quiver, 1) * radscale, u1d_LSQ(~nanstat_quiver, 2) * radscale, ...
-        u1d_LSQ(~nanstat_quiver, 3) * 0, 'AutoScale', 'off', 'LineWidth',2, 'MaxHeadSize', 0.1, 'Color', pred_color, 'DisplayName','Optimization Result');
+        u1d_LSQ(~nanstat_quiver, 3) * 0, 'AutoScale', 'off', 'LineWidth',2, 'MaxHeadSize', 0.1, 'Color', pred_color, 'DisplayName','Prediction');
 
     % Create tilt quiver plot
     quiver3(x(end)', y(end)', zeros(size(x(end)))', u1d(end, 1) * radscale, u1d(end, 2) * radscale, ...
@@ -350,7 +350,7 @@ make_disp_plot(t, finalindex, GPSNameList, ux, uy, uz, usim, u_low, u_high, tilt
     % text(x_ref - radscale*0.4, y_ref -radscale*0.1, "50 cm", 'Color', 'k', 'FontSize', 20);
 
     % Add reference vector for SDH tiltmeter
-    quiver(x_ref_tilt, y_ref_tilt, -tiltscale*radscale*100, 0, 'LineWidth',4, 'MaxHeadSize', 0.6, 'Color', 'k', 'HandleVisibility','off')
+    quiver(x_ref_tilt, y_ref_tilt, -tiltscale*radscale*200, 0, 'LineWidth',4, 'MaxHeadSize', 0.6, 'Color', 'k', 'HandleVisibility','off')
     % text(x_ref_tilt - radscale*0.15, y_ref_tilt -radscale*0.1, "100 µrad", 'Color', 'k', 'FontSize', 20);
 
     % Plot ellipsoids
@@ -458,7 +458,6 @@ make_disp_plot(t, finalindex, GPSNameList, ux, uy, uz, usim, u_low, u_high, tilt
     legend("FontSize", 28, "Location", "southwest");
 
     if(saveFigs); exportgraphics(figquiver, './PaperFigs/quiver_plot.png', 'Resolution', 500); end
-
 
     %% Plot just the reservoir geometry:
     

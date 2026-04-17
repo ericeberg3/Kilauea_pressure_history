@@ -133,6 +133,10 @@ for p=1:nP
         dist = makedist('Uniform','lower',a,'upper',b);
     end
 
+    if strcmp(params(p).name,'dcHMM')
+        dist = makedist('Normal','mu',-1940,'sigma',150);
+    end
+
     % Estimated dpHMM prior to get ~3 MPa in the correct time period
     if strcmp(params(p).name,'dpHMM_insar')
          % dist = makedist('Normal','mu',-22e6,'sigma',5e6);
@@ -151,7 +155,11 @@ for p=1:nP
     if strcmp(params(p).name,'volSC')
         dist = makedist('Uniform','lower',2.0e9, 'upper', 20e9);
     end
-    
+    if strcmp(params(p).name,'volHMM')
+        a = 1e9;
+        b = 15e9;
+        dist = makedist('Uniform','lower',a,'upper',b);
+    end
     % alphaHMM harder to fit bc of truncation, so manually set mu
     if strcmp(params(p).name,'alphaHMM')
         muHat = 1.78;   % weighted mean
