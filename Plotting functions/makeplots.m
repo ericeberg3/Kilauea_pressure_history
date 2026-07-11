@@ -32,17 +32,9 @@ function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilt
     %% Subplot pvt version
     
     fig = figure(11);
-    
-    % --- global text size & figure size --------------------------------------
-    baseFont = 22;                           % main tick‑label size
-    % set(fig,'Color','w',...
-    %         'Units','centimeters','Position',[4 4 20 10],...   % a bit wider
-    %         'DefaultAxesFontSize', baseFont,...
-    %         'DefaultAxesTitleFontSizeMultiplier', 1.25,...
-    %         'DefaultAxesLabelFontSizeMultiplier', 1.25,...
-    %         'DefaultLegendFontSize', baseFont);
-    
-    % --------- keep the original scaling variables but neutralise them -------
+   
+    baseFont = 22;         
+ 
     hmm_scale = 1;
     sc_scale  = 1;
     sc_offset = 0;
@@ -57,7 +49,7 @@ function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilt
     % Layout
     tlo = tiledlayout(2,2,'TileSpacing','tight','Padding','tight');
     
-    % ======================== 1) HMM subplot =================================
+    % HMM Subplot
     ax1 = nexttile;  hold(ax1,'on'); 
     
     xPatch     = [tvec; flipud(tvec)];
@@ -95,7 +87,7 @@ function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilt
     ylim([-10, 2]);
 
 
-    % ======================== 3) tau subplot ==================================
+    % Tau subplot
     ax3 = nexttile; hold(ax3, 'on');
     yPatch_tau = [tau_high(idx); flipud(tau_low(idx))] .* 1e-6;
     patch(ax3, xPatch, yPatch_tau, greyColor, 'FaceAlpha', 0.5, 'EdgeColor', 'none');
@@ -109,7 +101,7 @@ function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilt
     title("Average shear stress change vs. time", 'FontSize', baseFont+4)
     ylim([-1, 4]);
 
-    % ========= P*V vs. time plot (both SC and HMM) =======
+    % P * V subplot
     % First calculate the ratio between a unit pressure change and a unit
     % volume change:
     optM_unit = optimizedM(1:8);
@@ -160,16 +152,7 @@ function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilt
     for k = 1:numel(collapset)
         t0 = collapset(k) - hours(1);
         t1 = t0 + delta_t;            % time at which we sample the “post‑collapse” value
-        
-        % -------- vertical lines on both subplots ---------------------------
-        % collapse start
-        % xline(ax1, t0, '--', 'Color', colStart,  'LineWidth', 1.3);
-        % xline(ax2, t0, '--', 'Color', colStart,  'LineWidth', 1.3);
-        % % sample point
-        % xline(ax1, t1, ':',  'Color', colSample, 'LineWidth', 1.3);
-        % xline(ax2, t1, ':',  'Color', colSample, 'LineWidth', 1.3);
-        
-        % -------- amplitude (HMM) ------------------------------------------
+
         % find nearest indices in time vector
         [~, i0] = min(abs(tvec - t0));
         [~, i1] = min(abs(tvec - t1));
@@ -200,27 +183,27 @@ function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilt
     end
 
 
-%% Making grid of displacements and tilt
-
-% plotDispGrid(t, finalindex, GPSNameList, u_low, u_high, ux, uy, uz, usim, tiltx, tilty, "SDH", "east");
-make_disp_plot(t, finalindex, GPSNameList, ux, uy, uz, usim, u_low, u_high, tiltx, tilty, true)
-% —— Export as high-res PNG ——
-% set(gcf,'PaperUnits','inches','PaperPosition',[0 0 17 22]); % 10x8 inch canvas
-
-
+    %% Making grid of displacements and tilt
+    
+    % plotDispGrid(t, finalindex, GPSNameList, u_low, u_high, ux, uy, uz, usim, tiltx, tilty, "SDH", "east");
+    make_disp_plot(t, finalindex, GPSNameList, ux, uy, uz, usim, u_low, u_high, tiltx, tilty, true)
+    % —— Export as high-res PNG ——
+    % set(gcf,'PaperUnits','inches','PaperPosition',[0 0 17 22]); % 10x8 inch canvas
+    
+    
     %% Print out statistics
     
     disp("Net HMM dp: " + (dp(1, 1) - dp(end - finalindex, 1)))
     disp("Net SC dp: " + (dp(1, 2) - dp(end - finalindex, 2)))
-
+    
     % GPSrms = u - permute(usim(:, :, 1:14), [3, 2, 1]);
     % GPSrms = GPSrms(:);
     % GPSrms = rms(GPSrms, 'omitnan');
     % disp("GPS RMS Misfit: " + GPSrms)
-
+    
     % tiltrms = rms(simtiltx - tiltx) + rms(simtilty - tilty);
     % disp("Tilt Unweighted RMS Misfit: " + tiltrms);
-
+    
     clear GPSrms tiltrms
     
     %% Load in geometry
@@ -230,15 +213,9 @@ make_disp_plot(t, finalindex, GPSNameList, ux, uy, uz, usim, u_low, u_high, tilt
     
 
     %% Quiver Plot
-    % [gHMM, ~, ~, ~] = spheroid(mHMM, [x; y; z(1:length(x))], 0.25, 3.08*10^9);
-    % [gSC, ~, ~, ~] = spheroid(mSC, [x; y; z(1:length(x))], 0.25, 3.08*10^9);
-
     [gHMM, gSC] = creategreens(mHMM, mSC);
     [gTiltHMM, gTiltSC] = createtiltgreens(mHMM, mSC, 0, false);
 
-    % x = GPS_llh(1,:);
-    % y = GPS_llh(2,:);
-    
     pred_color = "#A2142F";
     obs_color = "#026acc";
 
@@ -345,9 +322,7 @@ make_disp_plot(t, finalindex, GPSNameList, ux, uy, uz, usim, u_low, u_high, tilt
     
     % Plot the reference circle
     plot(x_ref_circle, y_ref_circle, 'k', 'LineWidth', 3, 'HandleVisibility','off');
-    % text(x_ref - 250, y_ref - r_ref - 200, "30 cm", 'Color', 'k', 'FontSize', 20, 'HandleVisibility','off');
     quiver(x_ref, y_ref, -radscale * 0.5, 0, 'LineWidth',4, 'MaxHeadSize', 0.6, 'Color', 'k', 'HandleVisibility','off'); % Vector scale reference
-    % text(x_ref - radscale*0.4, y_ref -radscale*0.1, "50 cm", 'Color', 'k', 'FontSize', 20);
 
     % Add reference vector for SDH tiltmeter
     quiver(x_ref_tilt, y_ref_tilt, -tiltscale*radscale*200, 0, 'LineWidth',4, 'MaxHeadSize', 0.6, 'Color', 'k', 'HandleVisibility','off')
@@ -413,9 +388,7 @@ make_disp_plot(t, finalindex, GPSNameList, ux, uy, uz, usim, u_low, u_high, tilt
         y_rot = reshape(pts(2,:), size(y_ell)) + y_c;
         z_rot = reshape(pts(3,:), size(z_ell)) + z_c;
         
-        % ------------------------------------------------------------------
-        % 5.  Plot with a visible grid
-        % ------------------------------------------------------------------
+        % Plot with grid
         if(i==1); surf(x_rot, y_rot, z_rot, 'FaceColor', col, 'FaceAlpha', 0.8, 'EdgeColor', 'k', 'EdgeAlpha', 0.5, 'DisplayName', name);
         else; surf(x_rot, y_rot, z_rot, 'FaceColor', col, 'FaceAlpha', 0.8, 'EdgeColor', 'k', 'EdgeAlpha', 0.5, "HandleVisibility", 'off'); end
         hold on
@@ -536,9 +509,7 @@ make_disp_plot(t, finalindex, GPSNameList, ux, uy, uz, usim, u_low, u_high, tilt
         y_rot = reshape(pts(2,:), size(y_ell)) + y_c;
         z_rot = reshape(pts(3,:), size(z_ell)) + z_c;
         
-        % ------------------------------------------------------------------
-        % 5.  Plot with a visible grid
-        % ------------------------------------------------------------------
+        % Plot with a grid
         if(i==1); surf(x_rot.*1e-3, y_rot.*1e-3, z_rot.*1e-3, 'FaceColor', col, 'FaceAlpha', 0.8, 'EdgeColor', 'k', 'EdgeAlpha', 0.5, 'DisplayName', name);
         else; surf(x_rot.*1e-3, y_rot.*1e-3, z_rot.*1e-3, 'FaceColor', col, 'FaceAlpha', 0.8, 'EdgeColor', 'k', 'EdgeAlpha', 0.5, "HandleVisibility", 'off'); end
         hold on
@@ -570,45 +541,9 @@ make_disp_plot(t, finalindex, GPSNameList, ux, uy, uz, usim, u_low, u_high, tilt
     % legend("FontSize", 18, "Location", "southwest");
 
     if(saveFigs); exportgraphics(figquiver, './PaperFigs/spheroid_plot.png', 'Resolution', 500); end
-    %% Plot inSAR
-    % cLimits = [-1.0, 1.0];
-    % cmap = parula;
-    % figinsar = figure(8);
-    % 
-    % clf;
-    % tl2 = tiledlayout(2,2,'Padding','compact', 'TileSpacing','compact');
-    % nexttile(tl2);
-    % plot_insar(insarx, insary, insaru, block_size, look, x, y, u1d, u1d_LSQ, nanstat, ...
-    % radscale, 31, GPSNameList, coast_new,cLimits, cmap, saveFigs);
-    % title("Insar data");
-    % nexttile(tl2);
-    % plot_insar(insarx, insary, insaru_pred, block_size, look, x, y, u1d, u1d_LSQ, nanstat, ...
-    % radscale, 31, GPSNameList, coast_new,cLimits, cmap, saveFigs);
-    % title("Insar prediction")
-    % nexttile(tl2);
-    % 
-    % cLimits = [-0.5, 0.5];
-    % cmap = brewermap(64, 'RdYlBu');
-    % plot_insar(insarx, insary, insaru - insaru_pred', block_size, look, x, y, u1d, u1d_LSQ, nanstat, ...
-    % radscale, 31, GPSNameList, coast_new, cLimits, cmap, saveFigs);
-    % title("Residual");
-    % 
-    % if(saveFigs); exportgraphics(figinsar, './PaperFigs/insarfit.png', 'Resolution', 500); end
 end
 
 function addScaleBar(ax, totalLen, nSeg, width, varargin)
-% addScaleBar(ax, totalLen, nSeg, width, Name,Value,…)
-%
-%   ax        = target axes (gca if omitted)
-%   totalLen  = bar length in data units   (m)
-%   nSeg      = number of alternating boxes
-%   width     = bar height / thickness     (m)
-%
-% Name-value options:
-%   'FaceAlpha'  – transparency (default 0.9)
-%   'Color1'     – colour of the first box (default 'k')
-%   'Color2'     – colour of the second box (default 'w')
-%   'Text'       – label string (default sprintf('%g km',totalLen/1000))
 
 if nargin < 1 || isempty(ax),  ax = gca;  end
 p = inputParser;

@@ -13,7 +13,7 @@ daily_GPS = readtable('data/daily_gps_mult_stations.csv');
 
 addpath('./Plotting functions/')
 
-%% Creating GPS names and setting up x and y coordinates
+%% Creating GPS names 0and setting up x and y coordinates
 GPSNameList = ["69FL","92YN","AHUP","BDPK","BYRL","CNPK","CRIM","DEVL","OUTL","PUHI","PWRL","UWEV","V120","VSAS", "CALS"];
 tiltNameList = ['SDH'];
 
