@@ -1,6 +1,16 @@
 Data/
 Figures/
 PaperFigs/
-Elizabeth insar scripts/
+# Ignore everything inside the Elizabeth insar scripts directory
+Elizabeth insar scripts/**
+
+# Explicitly allow MATLAB files in that directory and its subdirectories
+!Elizabeth insar scripts/**/*.m
+*.cc
+*.int
+*.mp4
+*.png
+*.csv
+
 *.mat
 .DS_Store
