@@ -164,7 +164,6 @@ fclose(fid);
 disp=reshape(dat,nr*2,naz,nigrams); % Displacement
 disp_amp = disp(1:nr,:,:);
 displacement = disp(nr+1:end,:,:);
-clear disp dat   % free the raw read + full array (~1 GB); no longer used below
 %%
 lambda = 5.56e-2;
 displacement = displacement/(4*pi)*lambda; % In meters
@@ -208,17 +207,8 @@ B = 256;
 new_rows = floor(nrows/B)*B;
 new_cols = floor(ncols/B)*B;
 
-% Discard pixels below the coherence threshold BEFORE quadtree decomposition.
-% (Reviewer response: rather than discarding whole quadtree blocks that contain
-%  >10% low-coherence pixels after the fact, we drop the incoherent pixels first
-%  and let the quadtree subdivide/aggregate only the coherent ones.)
-coh_threshold = 0.3;
-coh_mask = min_cc_desc < coh_threshold;         % true = incoherent pixel to discard
-cum_disp_desc_masked = cum_disp_desc;
-cum_disp_desc_masked(coh_mask) = NaN;
-
 % Crop the image
-unw_crop = cum_disp_desc_masked(1:new_rows, 1:new_cols);
+unw_crop = cum_disp_desc(1:new_rows, 1:new_cols);
 cc_crop = avg_cc_desc(1:new_rows, 1:new_cols);
 
 cc_tests = zeros(3, size(cc_crop, 1), size(cc_crop, 2));
@@ -227,13 +217,11 @@ cc_tests(2, :, :) = min_cc_desc(1:new_rows, 1:new_cols);
 cc_tests(3, :, :) = bot30_cc_desc(1:new_rows, 1:new_cols);
 
 
-% Perform quadtree decomposition. qtdecomp's split test uses max()-min(), which
-% ignore the NaN (masked) pixels by default, so incoherent regions are subdivided
-% based on the coherent pixels' range rather than inflating a block's variance.
+% Perform quadtree decomposition
 S = qtdecomp(unw_crop, tol, [1, B]);
 
-% Initialize the resampled image with the (coherence-masked) data
-resampled = cum_disp_desc_masked;
+% Initialize the resampled image with the original data
+resampled = cum_disp_desc;
 
 % Get the list of unique block sizes present in the quadtree decomposition
 blockSizes = full(unique(S(S > 0)));
@@ -243,15 +231,15 @@ blockSizes = sort(blockSizes, 'descend');
 % Loop over each block size
 for bs = blockSizes'
     % Extract blocks of the current size using qtgetblk
-    blocks = qtgetblk(cum_disp_desc_masked, S, bs);
+    blocks = qtgetblk(cum_disp_desc, S, bs);
     if ~isempty(blocks)
         % Find indices (upper left corners) of blocks with size bs in S
         [r, c] = find(S == bs);
         for k = 1:length(r)
-            % Define the block indices in cum_disp_desc_masked
-            block = cum_disp_desc_masked(r(k):r(k)+bs-1, c(k):c(k)+bs-1);
-            % Mean of the coherent (non-masked) pixels; all-incoherent block -> NaN
-            blockMean = mean(block(:), 'omitnan');
+            % Define the block indices in cum_disp_desc
+            block = cum_disp_desc(r(k):r(k)+bs-1, c(k):c(k)+bs-1);
+            % Compute the mean of the block
+            blockMean = mean(block(:));
             % Replace the block with its mean value in the resampled image
             resampled(r(k):r(k)+bs-1, c(k):c(k)+bs-1) = blockMean;
         end
@@ -359,11 +347,9 @@ cumDisp_looked = cumDisp * avglook_desc;
 % cc_crop: the cropped coherence data
 % S: the quadtree structure from qtdecomp on unw_crop
 
-% Coherence filtering is now applied at the pixel level before the quadtree
-% (see the coherence mask above), so no per-block discarding is needed here.
-filtered_resampled = resampled;
-
 % Filter out values within caldera
+nan_threshold_coh = 0.10;
+filtered_resampled = downsample_coh(0.3, nan_threshold_coh, min_cc_desc, resampled, S);
 cald_bnds = [[-155.277, 19.43]; [-155.257, 19.41]];
 
 [~, left_ind] = min(abs(longitudes - cald_bnds(1,1)));
@@ -372,25 +358,6 @@ cald_bnds = [[-155.277, 19.43]; [-155.257, 19.41]];
 [~, down_ind] = min(abs(latitudes - cald_bnds(2,2)));
 
 filtered_resampled(up_ind:down_ind, left_ind:right_ind) = nan;
-
-function fr = quadtree_by_coh(cum_disp, min_cc, coh, tol, B)
-% Pixel-first coherence mask + quadtree downsample at a single coherence
-% threshold, matching the main pipeline: pixels below the threshold are set to
-% NaN BEFORE the quadtree, and each block is averaged over its coherent pixels
-% (an all-incoherent block -> NaN and drops out).
-[nrw, ncw] = size(cum_disp);
-R = floor(nrw/B)*B;  C = floor(ncw/B)*B;
-masked = cum_disp;   masked(min_cc < coh) = NaN;
-S = qtdecomp(masked(1:R, 1:C), tol, [1, B]);
-fr = masked;
-for bs = sort(full(unique(S(S > 0))), 'descend')'
-    [rr, cc] = find(S == bs);
-    for k = 1:numel(rr)
-        blk = masked(rr(k):rr(k)+bs-1, cc(k):cc(k)+bs-1);
-        fr(rr(k):rr(k)+bs-1, cc(k):cc(k)+bs-1) = mean(blk(:), 'omitnan');
-    end
-end
-end
 
 function filtered_resampled = downsample_coh(cc_threshold, nan_threshold, cc_crop, resampled, S)
 % Define your coherence threshold
@@ -552,44 +519,55 @@ hold off
 
 % Plot GPS and InSAR residuals
 
-%% Test a variety of coherence thresholds (new pixel-first masking)
-% One panel per coherence threshold, produced exactly like the main pipeline
-% (mask the sub-threshold pixels, THEN quadtree). Use this to choose the
-% coherence value that best balances coverage vs. noise for your needs.
+%% Test a variety of coh threshold / nan threshold
 load insar_pred_griddata.mat
-thresh = figure(5); clf;
-coh_list = [0.2, 0.25, 0.3, 0.35, 0.4];
-nan_list = [0.01, 0.05, 0.1];        % only used by the residual diagnostics below
-imRef = -resampled;                  % main-pipeline (coh=0.3) refs for figs 25/21
+thresh = figure(5);
+coh_list = [0.2, 0.3, 0.4];
+nan_list = [0.01, 0.05, 0.1];
+imRef = -resampled;
 ccRef = squeeze(cc_tests(2,:,:));
+nrows = length(coh_list);
+ncols = 3;
+grey_index = size(abyss, 1); 
 
-ncols_grid = 3;
-nrows_grid = ceil(numel(coh_list) / ncols_grid);
-tiledlayout(nrows_grid, ncols_grid, 'TileSpacing', 'compact', 'Padding', 'compact');
+t = tiledlayout(nrows, ncols, 'TileSpacing', 'compact', 'Padding', 'none');
+clf;
 
-for i = 1:numel(coh_list)
-    nexttile;
-    fr = quadtree_by_coh(cum_disp_desc, min_cc_desc, coh_list(i), tol, B);
-    fr(up_ind:down_ind, left_ind:right_ind) = NaN;   % blank the caldera
-    imagesc(longitudes, latitudes, -fr);
-    set(gca, 'YDir', 'normal');
-    hold on;
-    plot(gpsLon, gpsLat, '.r', "MarkerSize", 14);
-    colormap bone;
-    clim([-1.5, 0.5]);
-    axis square;
-    plot(coast_new(:, 1)', coast_new(:, 2)', 'w.', 'HandleVisibility','off');
-    title(sprintf('coherence \\geq %.2f', coh_list(i)), 'FontSize', 14);
-    xlim([-155.33, -155.22]);
-    ylim([19.34, 19.48]);
+for i = 1:nrows
+    for j = 1:ncols
+        % subplot(nrows, ncols, (i-1)*ncols + j);  % Proper subplot indexing 
+        ax = nexttile;
+        filtered_resampled_test = downsample_coh(coh_list(i), nan_list(j), ccRef, imRef, S); %min_coh_asc
+
+        % Find all NaN values in the filtered data
+        % nan_indices = isnan(filtered_resampled_test);
+        % 
+        % % Replace NaN values with the index of the grey color in our custom colormap
+        % % This is a crucial step to map NaNs to the grey color
+        % filtered_resampled_test(nan_indices) = grey_index;
+
+        imagesc(longitudes, latitudes, filtered_resampled_test);
+        set(gca, 'YDir', 'normal');
+        hold on;
+        plot(gpsLon, gpsLat, '.r', "MarkerSize", 14);
+        % text(gpsLon + 1e-2, gpsLat, GPSNameList, 'color', 'red');
+        colormap bone;
+        clim([-1.5, 0.5])
+        axis square;
+        % colorbar;
+        plot(coast_new(:, 1)', coast_new(:, 2)', 'w.', 'HandleVisibility','off');
+        % title("Threshold = " + coh_list(i) + ", nan percent acceptable: " + nan_list(j)*100 + "%", "FontSize", 13);
+        xlim([-155.33, -155.22]);
+        ylim([19.34, 19.48]);
+    end
 end
 
 cb = colorbar;
 cb.Layout.Tile = 'east';
 cb.FontSize = 22;
 cb.Label.String = 'LOS Displacement (m)';
-sgtitle('Displacement retained vs. coherence threshold (pixel-first mask)', 'FontSize', 20);
-exportgraphics(thresh, './desc_mask_grid.png', 'Resolution', 200);
+% sgtitle("Real deformation with various filter criteria. Min of all coh slices used", "FontSize", 30)
+exportgraphics(thresh, './desc_mask_grid.png', 'Resolution', 500);
 
 
 %% Plot which GPS stations are excluded
@@ -744,13 +722,12 @@ close(v);
 
 end
 
-%% Median filter + phase/displacement video (heavy; gated off by default)
-doBothVideo = 0;   % set to 1 to render kilauea_both_timeseries.mp4
-if doBothVideo == 1
+%% Displacement median filter 
 medfilt_disp = zeros(size(displacement));
 for k = 1:nigrams
     medfilt_disp(:,:,k) = medfilt2(displacement(:,:,k), [50 50]);
 end
+%% Video of phase and displacement 
 v = VideoWriter('kilauea_both_timeseries.mp4','MPEG-4');
 v.FrameRate = 2;
 open(v);
@@ -791,10 +768,9 @@ for k = 1:nigrams
     % pause(0.2)
 end
 close(v);
-end   % doBothVideo
 
 
-%% Display in a way you can see values by clicking on the image
+%% Display in a way you can see values by clicking on the image 
 % Change which image it is by changing (:,:,1) or (:,:,end) to other points
 % besides the first and last in the time series. 
 read_unw = 1; 
