@@ -1,4 +1,4 @@
-function [dp_low, dp_high, u_high, u_low] = GetErrors(N_draws, N_noise, posterior, ...
+function [dp_low, dp_high, u_high, u_low, dv_low, dv_high] = GetErrors(N_draws, N_noise, posterior, ...
     paramDists, ntime, ux, uy, uz, tiltx, tilty, ...
     dispstd, GPSNameList, rw_stddev, dp_weight, taiyi_parameters, ...
     npitloc, gps_sigma, nanstatbeginning, paramNames, optimizedM)
@@ -21,11 +21,15 @@ full_posterior = zeros(length(full_param_names), N_draws);
 
 % Excluding dip HMM, strike HMM, SC volume % ADD MU
 
+% Draw whole geometries from the posterior: every inverted parameter uses the
+% SAME set of chain samples, so each column of full_posterior is one coherent
+% posterior geometry with its parameter correlations intact
+rand_cols = randi(size(posterior, 2), 1, N_draws);
+
 % populate the posterior distribution with each relevant metric
 for i = 1:size(full_posterior, 1)
     idx = find(strcmp(full_param_names{i}, paramNames));
     if(~isempty(idx))
-        rand_cols = randi(size(posterior, 2), 1, N_draws);
         full_posterior(i, :) = posterior(idx, rand_cols);
     else
         % xlims = paramDists.(full_param_names{i}).xlim;
@@ -107,6 +111,7 @@ end
 % Include optimal geometry in one of the samples
 geo_samples(:, 1) = optimizedM;
 dp_dist = zeros(N_draws, N_noise, ntime*2);
+dv_dist = zeros(N_draws, N_noise, ntime*2);
 ux_dist = zeros(N_draws, N_noise, size(ux, 1), size(ux, 2));
 uy_dist = zeros(N_draws, N_noise, size(ux, 1), size(ux, 2));
 uz_dist = zeros(N_draws, N_noise, size(ux, 1), size(ux, 2));
@@ -122,6 +127,10 @@ for i = 1:N_draws
     % Format new geometry into optimizedM array
     m_samp = geo_samples(:,i); % get_full_m(taiyi_parameters, geo_samples(:,i), true);
     mu_samp = 3.08e9; %10^mu_samples(i);
+    % Pressure -> volume conversion for THIS sample's geometry, so the
+    % volume history of each draw uses the chamber it was inverted with
+    vp_ratio_HMM_samp = vp_ratio(m_samp(1:8), mu_samp);
+    vp_ratio_SC_samp  = vp_ratio(m_samp(9:end), mu_samp);
     % Create new green's functions
     [gHMM_samp, gSC_samp] = creategreens(m_samp(1:8), m_samp(9:end), mu_samp, 'pressure');
     [gTiltHMM_samp, gTiltSC_samp] = createtiltgreens(m_samp(1:8), m_samp(9:end), dtheta, false, mu_samp, 'pressure');
@@ -195,10 +204,18 @@ for i = 1:N_draws
         temp(idx_HMM) = fillmissing(temp(idx_HMM), "makima", 1);
         temp(idx_SC) = fillmissing(temp(idx_SC), "makima", 1);
 
-        dp_dist(i, j, :) = [temp(idx_HMM) .* m_samp(8)/(1e6), temp(idx_SC) .* m_samp(16)/(1e6)];
+        % Flatten to a row so [HMM, SC] halves are indexable by idx_HMM/idx_SC
+        % regardless of the orientation TimeDependentLSQtilt returns
+        dp_samp = [temp(idx_HMM) .* m_samp(8)/(1e6), temp(idx_SC) .* m_samp(16)/(1e6)];
+        dp_samp = dp_samp(:)';
+        dp_dist(i, j, :) = dp_samp;
+        % MPa * (km^3/MPa) = km^3
+        dv_dist(i, j, :) = [dp_samp(idx_HMM) .* vp_ratio_HMM_samp, ...
+                            dp_samp(idx_SC) .* vp_ratio_SC_samp];
     end
 end
 dp_dist = reshape(dp_dist, N_draws * N_noise, ntime*2);
+dv_dist = reshape(dv_dist, N_draws * N_noise, ntime*2);
 
 clear gHMM_samp gSC_samp gTiltHMM_samp gTiltSC_samp temp
 
@@ -209,6 +226,15 @@ pHigh = prctile(dp_dist, 95, 1)';  % 95th percentile
 
 dp_low = real([pLow(1:length(tiltx)), pLow((length(tiltx) + 1):(2*length(tiltx)))]);
 dp_high = real([pHigh(1:length(tiltx)), pHigh((length(tiltx) + 1):(2*length(tiltx)))]);
+
+% Get conf. interval for volume change [km^3]. Percentiles are taken on the
+% volume ensemble itself - scaling the pressure percentiles by the MLE
+% geometry is wrong because dp and dV/dp are anti-correlated across draws
+vLow  = prctile(dv_dist, 5, 1)';
+vHigh = prctile(dv_dist, 95, 1)';
+
+dv_low = real([vLow(1:length(tiltx)), vLow((length(tiltx) + 1):(2*length(tiltx)))]);
+dv_high = real([vHigh(1:length(tiltx)), vHigh((length(tiltx) + 1):(2*length(tiltx)))]);
 
 
 % Plot pressure histories and geometry diffs where the dp_HMM(t=end) is < 5MPa
@@ -350,4 +376,17 @@ hold on;
 plot(squeeze(u_low(end, 2, :)), "DisplayName", "10th percentile");
 plot(squeeze(u_high(end, 2, :)), "DisplayName", "90th percentile");
 legend();
+end
+
+function r = vp_ratio(m_source, mu)
+% Displacement from a unit pressure change divided by the displacement from
+% a unit volume change for a fixed geometry: (m/Pa)/(m/m^3) = m^3/Pa.
+% Returned in km^3/MPa (1 m^3/Pa = 1e-3 km^3/MPa) so it maps dp [MPa] to
+% dV [km^3]. The ratio is independent of the observation point since both
+% fields share the same spatial pattern for a given geometry.
+    m_unit = m_source;
+    m_unit(8) = 1;
+    disp_p_change = sqrt(sum(real(spheroid(m_unit, [0;0;0], 0.25, mu)).^2));
+    disp_v_change = sqrt(sum(real(spheroid(m_unit, [0;0;0], 0.25, mu, 'volume')).^2));
+    r = (disp_p_change/disp_v_change) * 1e-3;
 end

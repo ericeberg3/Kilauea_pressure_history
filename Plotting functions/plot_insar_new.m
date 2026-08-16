@@ -276,7 +276,7 @@ if(~xon) set(gca,'XTickLabel', []); end
 if(~yon) set(gca,'YTickLabel', []); end
 
 if(saveFigs)
-    exportgraphics(fig, "./PaperFigs/insar.png", 'Resolution', 500);
+    exportgraphics(fig, "./PaperFigs/insar.png", 'Resolution', 300);
 end
 
 end

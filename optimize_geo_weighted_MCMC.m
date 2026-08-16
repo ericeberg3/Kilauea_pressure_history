@@ -205,7 +205,7 @@ ub = [1e6, 1e6, 3e10, 227, 1050, -7.5e2, 1.8, ...
      2.2e3, -0.45e3, -2.7e3, 1, 90, 180, 1e6, 1e6, 20e9]; 
 
 % Save figures for export
-saveFigs = true;
+saveFigs = false;
 
 %% Loading in InSAR data for geometry inversion
 % All insar data was created using scripts in the "InSAR processing" folder
@@ -291,9 +291,9 @@ dynamic_prior_weights = [];
 % gps_weights = linspace(4e1, 8e1, 10);
 % prior_weights = linspace(3e2, 1e3, 10);
 % Initial weights gps = 7, prior = 0.15
-gps_weight = 7; % 26; %log10(0.3);% 6.7e1  Optimal weight based on L curve
+gps_weight = 26; % 7; %log10(0.3);% 6.7e1  Optimal weight based on L curve
 insar_weight = 1; %log10(6);%5.3e2; % Optimal weight based on L curve
-prior_weight = 1.5e-1; %1.6e-1;
+prior_weight = 1.6e-1; %1.6e-1;
 % burn = 0.5e3;
 
 % delete(gcp('nocreate'));
@@ -326,8 +326,8 @@ for i = 1:n_l_curve
     % Check if we are doing L curve analysis. If so set weight
     % appropriately
     if(run_L_curve)
-        if(l_curve_type == "prior"); prior_weight = prior_weights(i); gps_weight = 7; %2e2;
-        else; prior_weight = 1.5e-1; gps_weight = gps_weights(i); end
+        if(l_curve_type == "prior"); prior_weight = prior_weights(i); gps_weight = 26; %2e2;
+        else; prior_weight = 1.6e-1; gps_weight = gps_weights(i); end
   
         
         [optParams_i, gps_l2, insar_l2, prior_l2] = generate_l_curve_point(i, n_l_curve, u1d, insaru_full, ...
@@ -354,7 +354,7 @@ for i = 1:n_l_curve
         start_params = get_full_m(taiyi_parameters, real(optParams)', true, "insar");
 
         if(~run_L_curve)
-            save Data/MCMC_final_2e6_dv_gps26_insar016_nointersect.mat optParams posterior L_keep gps_l2 insar_l2 prior_l2;
+            % save Data/MCMC_final_2e6_dv_gps26_insar016_nointersect_corrected.mat optParams posterior L_keep gps_l2 insar_l2 prior_l2;
         else
             l_curve_points(:, i) = [gps_l2; insar_l2; prior_l2];
     
@@ -367,7 +367,7 @@ for i = 1:n_l_curve
         end
     else
         % load Data/MCMC_final_1e6_dv_gps2e2_insar1e3_nointersect.mat;
-        load Data/MCMC_final_2e6_dv_gps26_insar016_nointersect.mat;
+        load Data/MCMC_final_2e6_dv_gps26_insar016_nointersect_corrected.mat;
         % load Data/MCMC_final_1e6_dv_gps5e2_insar05_nointersect.mat;
         [~, ind] = max(L_keep);
         optParams = posterior(:, ind);
@@ -386,7 +386,7 @@ if(run_L_curve)
     % gps_weights2 = linspace(1.5e2, 5e2, 10);
     % prior_weights2 = linspace(600, 1.5e3, 10);
     
-    save("Data/l_curve_data_" + l_curve_type + "_pattern_gps7_prior015.mat", "l_curve_points", "l_curve_type", "prior_weights", "gps_weights");
+    save("Data/l_curve_data_" + l_curve_type + "_pattern_gps7_prior015.mat", "l_curve_points", "l_curve_type", "prior_weights", "gps_weights", "optParams_list");
 
 
     % load("Data/l_curve_data_gps_dvinversion_5e5_nointersect.mat", "l_curve_points", "l_curve_type", "prior_weights", "gps_weights");
@@ -396,9 +396,7 @@ if(run_L_curve)
     % load("Data/l_curve_data_gps_dvinversion_5e5_nointersect_2.mat", "l_curve_points", "l_curve_type", "prior_weights", "gps_weights");
     % l_curve_combined = [l_curve_combined, l_curve_points];
     % gps_weights_combined = [gps_weights_combined, gps_weights];
-    % prior_weights_combined = [prior_weights_combined, prior_weights];
-
-    
+    % prior_weights_combined = [prior_weights_combined, prior_weights];    
 
     posterior = squeeze(posteriors_list(:, :, end));
     optParams = optParams_list(:, end)';
@@ -432,8 +430,8 @@ if(subsample)
     dpHMM_insar = posterior(1,:).*HMM_p_factor;
     dp_posterior = posterior; dp_posterior(1,:) = dpHMM_insar; dp_posterior(2,:) = dpHMM_gps;
 
-    subsamp_inds = dpHMM_gps > -6e6 & dpHMM_insar > -20e6;
-    % subsamp_inds = dpHMM_gps > -10e6 & dpHMM_insar > -22e6;
+    % subsamp_inds = dpHMM_gps > -6e6 & dpHMM_insar > -20e6 & ~intersections;
+    subsamp_inds = dpHMM_gps > -10e6 & dpHMM_insar > -22e6;
     [~, ind] = max(L_keep(subsamp_inds));
     subsamp_posterior = posterior(:, subsamp_inds);
 
@@ -443,10 +441,12 @@ if(subsample)
     optParams_subsamp = subsamp_posterior(:, ind);
     optdp = [dpHMM_gps(ind), dpSC_gps(ind)];
 end
+disp(size(subsamp_posterior, 2))
 
+%%
 
 plotHists(posterior, dp_posterior, subsamp_inds, ind, optParams_subsamp, lb, ub, paramNames, saveFigs)
-% posterior = subsamp_posterior;
+%% posterior = subsamp_posterior;
 optParams = optParams_subsamp';
 
 %%
@@ -460,7 +460,7 @@ optimizedM = get_full_m(taiyi_parameters, optParams, true, "insar");
 load Data/paramDists.mat;
 
 %% Plot correlation btwn parameters
-plotCorr(posterior, saveFigs)
+% plotCorr(posterior, saveFigs)
 % clearvars i j options resnorm resdpos dsize dangle A b res;
 
 %% Creating greens functions using the new parameters for M
@@ -516,11 +516,19 @@ getErrors = false;
 
 if(getErrors)
     disp("Getting errors...")
-    [dp_low, dp_high, u_low, u_high] = GetErrors(N_draws, N_noise, subsamp_posterior, paramDists, ntime, ux, uy, uz, tiltx, tilty, dispstd, ...
+    [dp_low, dp_high, u_low, u_high, dv_low, dv_high] = GetErrors(N_draws, N_noise, subsamp_posterior, paramDists, ntime, ux, uy, uz, tiltx, tilty, dispstd, ...
         GPSNameList, rw_stddev, dp_weight, taiyi_parameters, npitloc, invStdPWRL, nanstatbeginning, paramNames, optimizedM);
-    save Data/errors.mat dp_low dp_high u_low u_high;
+    save Data/errors_new.mat dp_low dp_high u_low u_high dv_low dv_high;
 else
-    load Data/errors.mat dp_low dp_high u_low u_high;
+    load Data/errors_new.mat dp_low dp_high u_low u_high;
+    % errors.mat files saved before the per-sample volume CI have no dv_low/dv_high
+    if any(strcmp(who('-file', 'Data/errors.mat'), 'dv_low'))
+        load Data/errors_new.mat dv_low dv_high;
+    else
+        dv_low = []; dv_high = [];
+        warning(['Data/errors_new.mat predates the volume confidence intervals - ' ...
+            'rerun with getErrors = true to get correct SC volume bounds.']);
+    end
 end
 
 
@@ -601,12 +609,12 @@ tau_pnas_high = -R/(2 * H) * dp_high(:,1)*1e6;
 % xlabel("Time"); axis square;
 %%
 makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilty, usim, u1dsim', t, nanstatend, ...
-    nanstatbeginning, finalindex, collapset, dp, dp_low, dp_high, tau_pnas, tau_pnas_low, tau_pnas_high, optParams, optimizedM, ...
+    nanstatbeginning, finalindex, collapset, dp, dp_low, dp_high, dv_low, dv_high, tau_pnas, tau_pnas_low, tau_pnas_high, optParams, optimizedM, ...
     GPSNameList, gTiltHMM, gTiltSC, xtilt, ytilt, tiltreduced, radscale, coast_new, taiyi_parameters, 3, ntrials, offsets, saveFigs);
 
 %% Insar plotting
 % Set if we want to plot the ascending or descending track with insarmode
-insarmode = "desc";
+insarmode = "asc";
 % make predicted insar data
 if(insarmode == "asc")
     ind = (insar_lengths(1) + 1):sum(insar_lengths);
@@ -626,8 +634,10 @@ cmap = turbo;
 % Set if x and y axis labels are on
 xon = false; yon = false;
 % Set if colorbar is on
-con = true;
+con = false;
 
 plot_insar_new(insarx(ind), insary(ind), insaru_full(ind) - insaru_pred', block_size(ind), look, x, y, u1d, u1d, xon, yon, con, ...
     31, GPSNameList, optimizedM, coast_new,cLimits, opacity, saveFigs, insarmode);
 %  - insaru_pred' insaru_full(ind)
+
+

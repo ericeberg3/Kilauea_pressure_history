@@ -1,5 +1,10 @@
-function plotLcurve(l_curve_points, l_curve_type, prior_weights, gps_weights)
-    %L curve plotting 
+function plotLcurve(l_curve_points, l_curve_type, prior_weights, gps_weights, outname)
+    %L curve plotting
+    % Optional 5th arg outname sets the output PNG path; defaults to the
+    % original ./PaperFigs/l_curve_<type>.png so existing calls are unchanged.
+    if(nargin < 5 || isempty(outname))
+        outname = "./PaperFigs/l_curve_" + l_curve_type + ".png";
+    end
     % Prepare L-curve data, GPS vs. insar
     % xl = l_curve_points(1,:);
     % yl = l_curve_points(2,:);
@@ -57,6 +62,6 @@ function plotLcurve(l_curve_points, l_curve_type, prior_weights, gps_weights)
                 event_obj.Position(2), ...
                 chosen_weights(event_obj.DataIndex)));
     
-    exportgraphics(l_curve, "./PaperFigs/l_curve_" + l_curve_type + ".png", 'Resolution', 500);
+    exportgraphics(l_curve, outname, 'Resolution', 500);
 
 end

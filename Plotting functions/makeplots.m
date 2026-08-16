@@ -1,6 +1,6 @@
 function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilty, ...
     usim, u1dsim, t, nanstat, nanstatbeginning, finalindex, collapset, ...
-    dp, dp_low, dp_high, tau, tau_low, tau_high, optParams, optimizedM, GPSNameList, gTiltHMM, gTiltSC, xtilt, ytilt, tiltreduced, radscale, ...
+    dp, dp_low, dp_high, dv_low, dv_high, tau, tau_low, tau_high, optParams, optimizedM, GPSNameList, gTiltHMM, gTiltSC, xtilt, ytilt, tiltreduced, radscale, ...
     coast_new, taiyi_parameters, disptype, ntrials, offsets, saveFigs)
 
     % u1d = squeeze(u(:, :, end-finalindex));
@@ -98,7 +98,7 @@ function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilt
     ax3.XAxis.FontSize = baseFont - 4;
     ax3.YAxis.FontSize = baseFont - 4;
     ylabel("\Delta \tau [MPa]", 'FontSize', baseFont+2);
-    title("Average shear stress change vs. time", 'FontSize', baseFont+4)
+    title("Shear Stress Change", 'FontSize', baseFont+4)
     ylim([-1, 4]);
 
     % P * V subplot
@@ -119,8 +119,18 @@ function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilt
     hmm_vp = hmm_pressure * vp_ratio_HMM; % m^3/Pa * 1 km^3 / 1e9 m^3 * 1/(1e-6 MPa/Pa)
     sc_vp  = sc_pressure * vp_ratio_SC;
 
-    sc_vp_low = dp_low(idx, 2) * vp_ratio_SC;
-    sc_vp_high = dp_high(idx, 2) * vp_ratio_SC;
+    % Volume bounds come straight from GetErrors, where each draw's pressure
+    % history was converted with its own geometry's dV/dp. Scaling dp_low/high
+    % by vp_ratio_SC here would apply the MLE dV/dp to every draw
+    if isempty(dv_low) || isempty(dv_high)
+        warning(['makeplots: no volume confidence intervals supplied - falling back to ' ...
+            'scaling the pressure CI by the MLE geometry, which misstates the volume bounds.']);
+        sc_vp_low = dp_low(idx, 2) * vp_ratio_SC;
+        sc_vp_high = dp_high(idx, 2) * vp_ratio_SC;
+    else
+        sc_vp_low = dv_low(idx, 2);
+        sc_vp_high = dv_high(idx, 2);
+    end
     yPatch_SC = [sc_vp_low; flipud(sc_vp_high)];
 
 
@@ -132,7 +142,8 @@ function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilt
     set(ax4, 'LineWidth', 1.4);
     ax4.XAxis.FontSize = baseFont - 4;
     ax4.YAxis.FontSize = baseFont - 4;
-    ylim(ax4, [-0.025, 0.002])
+    ax4.YAxis.Exponent = 0;
+    ylim(ax4, [-0.02, 0.002])
     ylabel("Volume change [km^3]", 'FontSize', baseFont+2);
     title("SC Volume change", 'FontSize', baseFont+4)
     % legend(ax4, "FontSize", baseFont, "Location", "southwest")
@@ -174,19 +185,21 @@ function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilt
     fprintf('Amplitude ratio (SC/HMM) = %.3f \n', mean(ampl_ratio, 'omitnan'))
     fprintf(' SC pressure drop = %.3f MPa, [%.3f, %.3f] \n', sc_pressure(end), ...
         dp_low(end-finalindex,2), dp_high(end-finalindex,2));
+    fprintf(' SC volume drop = %.3f km^3, [%.3f, %.3f] \n', sc_vp(end), ...
+        sc_vp_low(end-finalindex), sc_vp_high(end-finalindex));
     fprintf('Average shear stress drop: %.2e \n', median(ampl_tau/1e6, 'omitnan'));
     
     
     % ------------------------ Export (optional) ------------------------------
     if saveFigs
-        exportgraphics(fig,'./PaperFigs/pressure_histories_split.png','Resolution',600)
+        exportgraphics(fig,'./PaperFigs/pressure_histories_split.png','Resolution',300)
     end
 
 
     %% Making grid of displacements and tilt
     
-    % plotDispGrid(t, finalindex, GPSNameList, u_low, u_high, ux, uy, uz, usim, tiltx, tilty, "SDH", "east");
-    make_disp_plot(t, finalindex, GPSNameList, ux, uy, uz, usim, u_low, u_high, tiltx, tilty, true)
+    % plotDispGrid(t, finalindex, GPSNameList, u_low, u_high, ux, uy, uz, usim, tiltx, tilty, "PUHI", "north");
+    % make_disp_plot(t, finalindex, GPSNameList, ux, uy, uz, usim, u_low, u_high, tiltx, tilty, true)
     % —— Export as high-res PNG ——
     % set(gcf,'PaperUnits','inches','PaperPosition',[0 0 17 22]); % 10x8 inch canvas
     
@@ -253,7 +266,7 @@ function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilt
     realquiver = quiver3(x(~nanstat_quiver)', y(~nanstat_quiver)', zeros(size(x(~nanstat_quiver)))', u1d(gps_ind, 1) * radscale, u1d(gps_ind, 2) * radscale, ...
         u1d(gps_ind, 3) * 0, 'AutoScale', 'off', 'LineWidth',2, 'MaxHeadSize', 0.1, 'Color', obs_color, 'DisplayName', 'Data');
     simquiver = quiver3(x(~nanstat_quiver)', y(~nanstat_quiver)', zeros(size(x(~nanstat_quiver)))', u1d_LSQ(~nanstat_quiver, 1) * radscale, u1d_LSQ(~nanstat_quiver, 2) * radscale, ...
-        u1d_LSQ(~nanstat_quiver, 3) * 0, 'AutoScale', 'off', 'LineWidth',2, 'MaxHeadSize', 0.1, 'Color', pred_color, 'DisplayName','Prediction');
+        u1d_LSQ(~nanstat_quiver, 3) * 0, 'AutoScale', 'off', 'LineWidth',2, 'MaxHeadSize', 0.1, 'Color', pred_color, 'DisplayName','Estimation');
 
     % Create tilt quiver plot
     quiver3(x(end)', y(end)', zeros(size(x(end)))', u1d(end, 1) * radscale, u1d(end, 2) * radscale, ...
@@ -430,7 +443,7 @@ function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilt
     hold off;
     legend("FontSize", 28, "Location", "southwest");
 
-    if(saveFigs); exportgraphics(figquiver, './PaperFigs/quiver_plot.png', 'Resolution', 500); end
+    if(saveFigs); exportgraphics(figquiver, './PaperFigs/quiver_plot.png', 'Resolution', 300); end
 
     %% Plot just the reservoir geometry:
     
@@ -540,7 +553,7 @@ function makeplots(x, y, GPS_llh, u, u1d, ux, uy, uz, u_low, u_high, tiltx, tilt
     hold off;
     % legend("FontSize", 18, "Location", "southwest");
 
-    if(saveFigs); exportgraphics(figquiver, './PaperFigs/spheroid_plot.png', 'Resolution', 500); end
+    if(saveFigs); exportgraphics(figquiver, './PaperFigs/spheroid_plot.png', 'Resolution', 300); end
 end
 
 function addScaleBar(ax, totalLen, nSeg, width, varargin)

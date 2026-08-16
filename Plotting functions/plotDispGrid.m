@@ -176,7 +176,7 @@ for row = 1:nPlot
             ax.YTickLabel = [];
         end
 
-        box(ax,'on'); ax.LineWidth = 1.5; 
+        box(ax,'on'); ax.LineWidth = 1.5;
         ylim(ax, yLims(iSite,:));
         hold(ax,'off');
     end
@@ -236,9 +236,12 @@ if isSinglePlot
     set(gcf, 'Position', [2 2 15 5]); 
     set(gca, 'FontSize', 32);
 else
-    % Use the tall ratio for the full grid
-    set(gcf, 'Position', [0 0 17 22]); 
+    % Use the tall ratio for the full grid (units must be inches, otherwise
+    % the still-normalized units make [0 0 17 22] an invalid figure size)
+    set(gcf, 'Units', 'inches');
+    set(gcf, 'Position', [0 0 17 22]);
 end
 
-exportgraphics(gcf, './PaperFigs/disp_SDH_e.png', 'Resolution', 500);
+% exportgraphics(gcf, './PaperFigs/disp_SDH_e.png', 'Resolution', 300);
+exportgraphics(gcf, './PaperFigs/disp_grid.png', 'Resolution', 300);
 end
